@@ -1,0 +1,18 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "price_min",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "categoria",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1002353748756",
+    "project_id": "lotus-lxr3lu",
+    "storage_bucket": "lotus-lxr3lu.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1002353748756:android:d791ef51ec56137388b001",
+        "android_client_info": {
+          "package_name": "com.mycompany.lotus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2ZSQYP8bBN-YFJNutnS0LCQ0cX7vtFpY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
