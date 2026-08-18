@@ -1,3 +1,4 @@
+import '/custom_code/widgets/lotus_home_map.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
@@ -44,12 +45,7 @@ class _HomeWidgetState extends State<HomeWidget> {
     return Scaffold(
       key: scaffoldKey,
       backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-      body: SafeArea(
-        top: true,
-        child: Stack(
-          children: [],
-        ),
-      ),
+      body: const LotusHomeMap(),
     );
   }
 }
