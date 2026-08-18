@@ -2,6 +2,7 @@ import '/backend/backend.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import 'events_record_to_event.dart';
+import 'firestore_organizer_repository.dart';
 
 /// Bounded adapter for the first conventional search implementation.
 ///
@@ -69,21 +70,31 @@ final class FirestoreEventSearchRepository implements EventSearchRepository {
     }
 
     final organizers = <String, EventOrganizer>{};
-    final ids = references.values.map((reference) => reference.id).toList();
-    for (var offset = 0; offset < ids.length; offset += 30) {
-      final end = (offset + 30).clamp(0, ids.length);
-      final chunk = ids.sublist(offset, end);
-      try {
-        final snapshot = await UsersRecord.collection
-            .where(FieldPath.documentId, whereIn: chunk)
-            .get();
-        for (final document in snapshot.docs) {
-          final record = UsersRecord.fromSnapshot(document);
-          organizers[record.reference.path] = eventOrganizerFromRecord(record);
+    final grouped = <String, List<DocumentReference>>{};
+    for (final reference in references.values) {
+      grouped.putIfAbsent(reference.parent.path, () => []).add(reference);
+    }
+
+    for (final entry in grouped.entries) {
+      final ids = entry.value.map((reference) => reference.id).toList();
+      for (var offset = 0; offset < ids.length; offset += 30) {
+        final end = (offset + 30).clamp(0, ids.length);
+        final chunk = ids.sublist(offset, end);
+        try {
+          final snapshot = await FirebaseFirestore.instance
+              .collection(entry.key)
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
+          for (final document in snapshot.docs) {
+            final organizer = eventOrganizerFromSnapshot(document);
+            if (organizer != null) {
+              organizers[document.reference.path] = organizer;
+            }
+          }
+        } catch (_) {
+          // Search remains useful if a legacy private user profile cannot be
+          // read by the current user.
         }
-      } catch (_) {
-        // Search remains useful for events, venues, and categories if profile
-        // reads are unavailable for the current user.
       }
     }
     return organizers;

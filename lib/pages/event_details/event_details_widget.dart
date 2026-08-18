@@ -1,6 +1,8 @@
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/backend.dart';
 import '/custom_code/event_mapping/events_record_to_event.dart';
+import '/custom_code/event_mapping/firestore_favorite_repository.dart';
+import '/custom_code/event_mapping/firestore_organizer_repository.dart';
 import '/custom_code/widgets/event_details_content.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
@@ -12,9 +14,14 @@ export 'event_details_model.dart';
 
 /// FlutterFlow route wrapper for the maintainable event details UI.
 class EventDetailsWidget extends StatefulWidget {
-  const EventDetailsWidget({super.key, required this.eventoAtual});
+  const EventDetailsWidget({
+    super.key,
+    required this.eventoAtual,
+    this.favoriteRepository,
+  });
 
   final EventsRecord? eventoAtual;
+  final FavoriteRepository? favoriteRepository;
 
   static String routeName = 'EventDetails';
   static String routePath = '/eventDetails';
@@ -25,6 +32,14 @@ class EventDetailsWidget extends StatefulWidget {
 
 class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   bool _isUpdatingFavorite = false;
+  late final FavoriteRepository _favoriteRepository;
+
+  @override
+  void initState() {
+    super.initState();
+    _favoriteRepository =
+        widget.favoriteRepository ?? FirestoreFavoriteRepository();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,13 +63,10 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
         if (organizerReference == null) {
           return _buildDetails(record, null);
         }
-        return StreamBuilder<UsersRecord>(
-          stream: UsersRecord.getDocument(organizerReference),
+        return StreamBuilder<EventOrganizer?>(
+          stream: watchEventOrganizer(organizerReference),
           builder: (context, organizerSnapshot) {
-            final organizer = organizerSnapshot.hasData
-                ? eventOrganizerFromRecord(organizerSnapshot.data!)
-                : null;
-            return _buildDetails(record, organizer);
+            return _buildDetails(record, organizerSnapshot.data);
           },
         );
       },
@@ -69,43 +81,63 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
 
     return AuthUserStreamWidget(
       builder: (context) {
-        final isFavorite =
-            currentUserDocument?.favoritos.contains(record.reference) ?? false;
-        return EventDetailsContent(
-          event: event,
-          isFavorite: isFavorite,
-          isUpdatingFavorite: _isUpdatingFavorite,
-          onBack: context.safePop,
-          onShare: () => _shareEvent(event),
-          onToggleFavorite: () => _toggleFavorite(record.reference),
-          onOpenDirections: event.location.coordinates == null
-              ? null
-              : () => _openDirections(event),
-          onOpenTickets: event.hasTickets ? () => _openTickets(event) : null,
+        final userId = currentUserUid;
+        final favoriteStream = userId.isEmpty
+            ? Stream<bool>.value(false)
+            : _favoriteRepository.watchIsFavorite(
+                userId: userId,
+                eventId: record.reference.path,
+              );
+        return StreamBuilder<bool>(
+          stream: favoriteStream,
+          initialData:
+              currentUserDocument?.favoritos.contains(record.reference) ??
+              false,
+          builder: (context, favoriteSnapshot) {
+            final isFavorite = favoriteSnapshot.data ?? false;
+            return EventDetailsContent(
+              event: event,
+              isFavorite: isFavorite,
+              isUpdatingFavorite: _isUpdatingFavorite,
+              onBack: context.safePop,
+              onShare: () => _shareEvent(event),
+              onToggleFavorite: () => _toggleFavorite(
+                eventId: record.reference.path,
+                isFavorite: isFavorite,
+              ),
+              onOpenDirections: event.location.coordinates == null
+                  ? null
+                  : () => _openDirections(event),
+              onOpenTickets: event.hasTickets
+                  ? () => _openTickets(event)
+                  : null,
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _toggleFavorite(DocumentReference eventReference) async {
+  Future<void> _toggleFavorite({
+    required String eventId,
+    required bool isFavorite,
+  }) async {
     if (_isUpdatingFavorite) {
       return;
     }
-    final userReference = currentUserReference;
-    if (userReference == null) {
+    final userId = currentUserUid;
+    if (userId.isEmpty) {
       _showMessage('Inicia sessão para guardares eventos nos favoritos.');
       return;
     }
 
-    final isFavorite =
-        currentUserDocument?.favoritos.contains(eventReference) ?? false;
     setState(() => _isUpdatingFavorite = true);
     try {
-      await userReference.update({
-        'favoritos': isFavorite
-            ? FieldValue.arrayRemove([eventReference])
-            : FieldValue.arrayUnion([eventReference]),
-      });
+      await _favoriteRepository.setFavorite(
+        userId: userId,
+        eventId: eventId,
+        isFavorite: !isFavorite,
+      );
     } catch (_) {
       _showMessage('Não foi possível atualizar os favoritos.');
     } finally {

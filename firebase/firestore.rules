@@ -1,18 +1,171 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /events/{document} {
-      allow create: if true;
-      allow read: if true;
-      allow write: if false;
-      allow delete: if false;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    match /users/{document} {
-      allow create: if request.auth.uid == document;
-      allow read: if request.auth.uid == document;
-      allow write: if request.auth.uid == document;
-      allow delete: if request.auth.uid == document;
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isOrganizer() {
+      return signedIn() && request.auth.token.organizer == true;
+    }
+
+    function organizerReference(userId) {
+      return /databases/$(database)/documents/organizers/$(userId);
+    }
+
+    function optionalString(data, field, maxLength) {
+      return !(field in data) ||
+        (data[field] is string && data[field].size() <= maxLength);
+    }
+
+    function validUser(data, userId) {
+      return data.keys().hasAll(['uid', 'created_time']) &&
+        data.keys().hasOnly([
+          'email', 'display_name', 'photo_url', 'uid', 'created_time',
+          'phone_number', 'favoritos'
+        ]) &&
+        data.uid == userId &&
+        data.created_time is timestamp &&
+        optionalString(data, 'email', 320) &&
+        optionalString(data, 'display_name', 120) &&
+        optionalString(data, 'photo_url', 2048) &&
+        optionalString(data, 'phone_number', 40) &&
+        (!('favoritos' in data) ||
+          (data.favoritos is list && data.favoritos.size() <= 500));
+    }
+
+    function validOrganizer(data, organizerId) {
+      return data.keys().hasAll([
+          'display_name', 'owner_id', 'created_time', 'updated_time',
+          'is_verified'
+        ]) &&
+        data.keys().hasOnly([
+          'display_name', 'legal_name', 'slug', 'bio', 'photo_url',
+          'website_url', 'owner_id', 'created_time', 'updated_time',
+          'is_verified'
+        ]) &&
+        organizerId == data.owner_id &&
+        data.owner_id is string &&
+        data.created_time is timestamp &&
+        data.updated_time is timestamp &&
+        data.is_verified is bool &&
+        optionalString(data, 'display_name', 120) &&
+        optionalString(data, 'legal_name', 160) &&
+        optionalString(data, 'slug', 80) &&
+        optionalString(data, 'bio', 2000) &&
+        optionalString(data, 'photo_url', 2048) &&
+        optionalString(data, 'website_url', 2048);
+    }
+
+    function validEvent(data) {
+      return data.keys().hasAll([
+          'name', 'start_date', 'organizer_id', 'is_archived', 'is_boosted',
+          'click_count'
+        ]) &&
+        data.keys().hasOnly([
+          'name', 'location', 'image', 'description', 'ticket_status',
+          'coordenadas', 'start_date', 'end_date', 'is_free', 'price_min',
+          'venue_name', 'organizer_id', 'categoria', 'ticket_url',
+          'click_count', 'is_boosted', 'is_archived'
+        ]) &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 160 &&
+        data.start_date is timestamp &&
+        data.organizer_id is path &&
+        data.is_archived is bool &&
+        data.is_boosted is bool &&
+        data.click_count is int && data.click_count >= 0 &&
+        optionalString(data, 'location', 300) &&
+        optionalString(data, 'image', 2048) &&
+        optionalString(data, 'description', 10000) &&
+        optionalString(data, 'ticket_status', 80) &&
+        optionalString(data, 'venue_name', 200) &&
+        optionalString(data, 'ticket_url', 2048) &&
+        (!('coordenadas' in data) || data.coordenadas is latlng) &&
+        (!('end_date' in data) || data.end_date is timestamp) &&
+        (!('is_free' in data) || data.is_free is bool) &&
+        (!('price_min' in data) ||
+          (data.price_min is number && data.price_min >= 0)) &&
+        (!('categoria' in data) ||
+          (data.categoria is list && data.categoria.size() <= 20));
+    }
+
+    function ownsEvent(data) {
+      return isOrganizer() &&
+        data.organizer_id == organizerReference(request.auth.uid);
+    }
+
+    match /events/{eventId} {
+      // Event documents contain public catalogue data only. Archiving controls
+      // product visibility, not confidentiality, so existing unfiltered
+      // FlutterFlow queries remain valid.
+      allow read: if true;
+      allow create: if validEvent(request.resource.data) &&
+        (isAdmin() || ownsEvent(request.resource.data));
+      allow update: if validEvent(request.resource.data) &&
+        (isAdmin() ||
+          (ownsEvent(resource.data) &&
+            request.resource.data.organizer_id == resource.data.organizer_id &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'location', 'image', 'description', 'ticket_status',
+              'coordenadas', 'start_date', 'end_date', 'is_free', 'price_min',
+              'venue_name', 'categoria', 'ticket_url'
+            ])));
+      allow delete: if isAdmin();
+    }
+
+    match /organizers/{organizerId} {
+      allow read: if true;
+      allow create: if validOrganizer(request.resource.data, organizerId) &&
+        (isAdmin() ||
+          (owns(organizerId) && isOrganizer() &&
+            request.resource.data.is_verified == false));
+      allow update: if validOrganizer(request.resource.data, organizerId) &&
+        (isAdmin() ||
+          (owns(organizerId) && isOrganizer() &&
+            request.resource.data.owner_id == resource.data.owner_id &&
+            request.resource.data.created_time == resource.data.created_time &&
+            request.resource.data.is_verified == resource.data.is_verified));
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow create: if owns(userId) && validUser(request.resource.data, userId);
+      allow read: if owns(userId) || isAdmin();
+      allow update: if validUser(request.resource.data, userId) &&
+        (isAdmin() ||
+          (owns(userId) &&
+            request.resource.data.uid == resource.data.uid &&
+            request.resource.data.created_time == resource.data.created_time &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'email', 'display_name', 'photo_url', 'phone_number', 'favoritos'
+            ])));
+      allow delete: if owns(userId) || isAdmin();
+
+      match /favorites/{eventId} {
+        allow read: if owns(userId) || isAdmin();
+        allow create: if owns(userId) &&
+          request.resource.data.keys().hasOnly([
+            'event_ref', 'event_id', 'created_at'
+          ]) &&
+          request.resource.data.event_ref ==
+            /databases/$(database)/documents/events/$(eventId) &&
+          request.resource.data.event_id == eventId &&
+          request.resource.data.created_at == request.time;
+        allow update: if false;
+        allow delete: if owns(userId) || isAdmin();
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

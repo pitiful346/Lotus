@@ -6,6 +6,7 @@
 .pub/
 build/
 coverage/
+node_modules/
 
 # Android tooling
 android/.gradle/

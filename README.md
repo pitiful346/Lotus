@@ -24,3 +24,9 @@ flutter run --dart-define=MAPBOX_ACCESS_TOKEN=pk.your_public_token
 ```
 
 See `docs/mapbox.md` for mobile requirements, CI setup, and lifecycle details.
+
+## Backend
+
+Firebase é o backend único do projeto: Authentication, Cloud Firestore, Cloud
+Storage e Cloud Functions. O modelo de dados, as permissões, a migração dos
+favoritos e o processo de ativação estão em `docs/backend.md`.

@@ -21,3 +21,4 @@ export 'src/domain/models/geo_coordinates.dart';
 export 'src/domain/models/map_viewport_bounds.dart';
 export 'src/domain/repositories/map_event_repository.dart';
 export 'src/domain/repositories/event_search_repository.dart';
+export 'src/domain/repositories/favorite_repository.dart';

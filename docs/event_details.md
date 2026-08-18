@@ -10,9 +10,11 @@ modelo `Event` e ligar as ações externas.
 - imagem, nome, categorias, descrição e horário real do evento;
 - localização e acesso a direções quando existem coordenadas;
 - preço e disponibilidade dos bilhetes;
-- nome e imagem do organizador quando `organizer_id` aponta para um utilizador;
+- nome e imagem do organizador quando `organizer_id` aponta para um perfil
+  público em `organizers` ou para um utilizador legado acessível;
 - partilha através da interface nativa do sistema;
-- favorito persistido uma única vez no array `favoritos` do utilizador;
+- favorito persistido na subcoleção `favorites`, com sincronização temporária
+  do array legado `favoritos` para os widgets FlutterFlow ainda não migrados;
 - compra ou reserva através de `ticket_url`, quando disponível.
 
 Eventos gratuitos apresentam `Reservar`; eventos pagos apresentam

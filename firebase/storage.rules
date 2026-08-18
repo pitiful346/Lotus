@@ -1,0 +1,55 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isOrganizer() {
+      return signedIn() && request.auth.token.organizer == true;
+    }
+
+    function validImage(maxBytes) {
+      return request.resource != null &&
+        request.resource.size <= maxBytes &&
+        request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    // Compatible with FlutterFlow's current users/{uid}/uploads path.
+    match /users/{userId}/uploads/{fileName} {
+      allow read: if owns(userId) || isAdmin();
+      allow create, update: if (owns(userId) || isAdmin()) &&
+        validImage(5 * 1024 * 1024);
+      allow delete: if owns(userId) || isAdmin();
+    }
+
+    match /organizers/{organizerId}/{fileName} {
+      allow read: if true;
+      allow create, update: if
+        (isAdmin() || (owns(organizerId) && isOrganizer())) &&
+        validImage(10 * 1024 * 1024);
+      allow delete: if isAdmin() || (owns(organizerId) && isOrganizer());
+    }
+
+    // Namespacing event media by organizer makes ownership enforceable here.
+    match /events/{organizerId}/{eventId}/{fileName} {
+      allow read: if true;
+      allow create, update: if
+        (isAdmin() || (owns(organizerId) && isOrganizer())) &&
+        validImage(10 * 1024 * 1024);
+      allow delete: if isAdmin() || (owns(organizerId) && isOrganizer());
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
