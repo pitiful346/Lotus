@@ -12,13 +12,14 @@ import 'package:flutter/material.dart';
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
 import '/pages/event_details/event_details_widget.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/events_record_to_event.dart';
+import '../location/user_location_controller.dart';
 import 'event_map_preview_card.dart';
 import 'lotus_home_map_platform_stub.dart'
-    if (dart.library.io) 'lotus_home_map_platform_native.dart' as platform;
+    if (dart.library.io) 'lotus_home_map_platform_native.dart'
+    as platform;
 
 /// Full-screen event map used as the foundation of the Lotus Home page.
 class LotusHomeMap extends StatefulWidget {
@@ -27,12 +28,14 @@ class LotusHomeMap extends StatefulWidget {
     this.eventStream,
     this.onEventTap,
     this.onOpenEvent,
+    this.locationController,
   });
 
   /// Injectable for tests and future repository implementations.
   final Stream<List<Event>>? eventStream;
   final ValueChanged<Event>? onEventTap;
   final ValueChanged<Event>? onOpenEvent;
+  final UserLocationController? locationController;
 
   @override
   State<LotusHomeMap> createState() => _LotusHomeMapState();
@@ -40,15 +43,17 @@ class LotusHomeMap extends StatefulWidget {
 
 class _LotusHomeMapState extends State<LotusHomeMap> {
   late Stream<List<Event>> _eventStream;
+  late UserLocationController _locationController;
+  late bool _ownsLocationController;
   String? _selectedEventId;
   String? _openingEventId;
-  GeoCoordinates? _userCoordinates;
+  int _centerOnUserRequest = 0;
 
   @override
   void initState() {
     super.initState();
     _eventStream = widget.eventStream ?? watchMapEvents();
-    _loadUserCoordinates();
+    _attachLocationController();
   }
 
   @override
@@ -58,43 +63,45 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
       _eventStream = widget.eventStream ?? watchMapEvents();
       _selectedEventId = null;
     }
-  }
-
-  Future<void> _loadUserCoordinates() async {
-    final cached = cachedUserLocation;
-    if (cached != null) {
-      _setUserCoordinates(cached.latitude, cached.longitude);
-      return;
-    }
-
-    try {
-      final permission = await Geolocator.checkPermission();
-      final canReadLocation = permission == LocationPermission.always ||
-          permission == LocationPermission.whileInUse;
-      if (!canReadLocation || !await Geolocator.isLocationServiceEnabled()) {
-        return;
-      }
-
-      final position = await Geolocator.getLastKnownPosition() ??
-          await Geolocator.getCurrentPosition().timeout(
-            const Duration(seconds: 5),
-          );
-      _setUserCoordinates(position.latitude, position.longitude);
-    } catch (_) {
-      // Distance is optional; the preview remains useful without permission.
+    if (oldWidget.locationController != widget.locationController) {
+      _detachLocationController();
+      _attachLocationController();
     }
   }
 
-  void _setUserCoordinates(double latitude, double longitude) {
-    if (!mounted || (latitude == 0 && longitude == 0)) {
-      return;
+  void _attachLocationController() {
+    _ownsLocationController = widget.locationController == null;
+    _locationController = widget.locationController ?? UserLocationController();
+    _locationController.addListener(_handleLocationChange);
+    if (_supportsLocation) {
+      _locationController.refresh(requestPermission: false);
     }
-    setState(() {
-      _userCoordinates = GeoCoordinates(
-        latitude: latitude,
-        longitude: longitude,
-      );
-    });
+  }
+
+  void _detachLocationController() {
+    _locationController.removeListener(_handleLocationChange);
+    if (_ownsLocationController) {
+      _locationController.dispose();
+    }
+  }
+
+  bool get _supportsLocation =>
+      platform.isLotusHomeMapSupported || widget.locationController != null;
+
+  void _handleLocationChange() {
+    final coordinates = _locationController.state.coordinates;
+    if (coordinates != null) {
+      cachedUserLocation = LatLng(coordinates.latitude, coordinates.longitude);
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _detachLocationController();
+    super.dispose();
   }
 
   void _selectEvent(String eventId, Map<String, Event> eventsById) {
@@ -107,17 +114,50 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   }
 
   double? _distanceTo(Event event) {
-    final user = _userCoordinates;
-    final eventCoordinates = event.location.coordinates;
-    if (user == null || eventCoordinates == null) {
-      return null;
+    final user = _locationController.state.coordinates;
+    return user == null ? null : calculateDistanceToEvent(user, event);
+  }
+
+  Future<void> _centerOnUser() async {
+    final status = await _locationController.refresh(requestPermission: true);
+    if (!mounted) {
+      return;
     }
-    return Geolocator.distanceBetween(
-      user.latitude,
-      user.longitude,
-      eventCoordinates.latitude,
-      eventCoordinates.longitude,
-    );
+    if (status == UserLocationStatus.available) {
+      setState(() => _centerOnUserRequest += 1);
+      return;
+    }
+    _showLocationProblem(status);
+  }
+
+  void _showLocationProblem(UserLocationStatus status) {
+    final message = switch (status) {
+      UserLocationStatus.serviceDisabled =>
+        'Ativa a localização do dispositivo para veres a tua posição.',
+      UserLocationStatus.permissionDenied =>
+        'A permissão de localização foi recusada.',
+      UserLocationStatus.permissionDeniedForever =>
+        'Ativa a localização nas definições da aplicação.',
+      _ => 'Não foi possível obter a tua localização atual.',
+    };
+    final canOpenSettings =
+        status == UserLocationStatus.serviceDisabled ||
+        status == UserLocationStatus.permissionDeniedForever;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: canOpenSettings
+              ? SnackBarAction(
+                  label: 'Definições',
+                  onPressed: () {
+                    _locationController.openRelevantSettings();
+                  },
+                )
+              : null,
+        ),
+      );
   }
 
   Future<void> _openEventDetails(Event event) async {
@@ -168,6 +208,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         final events = snapshot.data ?? const <Event>[];
         final eventsById = {for (final event in events) event.id: event};
         final selectedEvent = eventsById[_selectedEventId];
+        final locationState = _locationController.state;
 
         return Stack(
           fit: StackFit.expand,
@@ -175,10 +216,18 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             platform.buildLotusHomeMap(
               events: events,
               onEventTap: (eventId) => _selectEvent(eventId, eventsById),
+              userCoordinates: locationState.coordinates,
+              centerOnUserRequest: _centerOnUserRequest,
             ),
             if (snapshot.connectionState == ConnectionState.waiting)
               const _MapLoadingIndicator(),
             if (snapshot.hasError) const _MapErrorIndicator(),
+            if (_supportsLocation)
+              _CenterOnUserButton(
+                status: locationState.status,
+                bottomInset: selectedEvent == null ? 24 : 218,
+                onPressed: _centerOnUser,
+              ),
             if (selectedEvent != null)
               EventMapPreviewCard(
                 event: selectedEvent,
@@ -190,6 +239,55 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
           ],
         );
       },
+    );
+  }
+}
+
+class _CenterOnUserButton extends StatelessWidget {
+  const _CenterOnUserButton({
+    required this.status,
+    required this.bottomInset,
+    required this.onPressed,
+  });
+
+  final UserLocationStatus status;
+  final double bottomInset;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoading = status == UserLocationStatus.loading;
+    final isDenied =
+        status == UserLocationStatus.permissionDenied ||
+        status == UserLocationStatus.permissionDeniedForever;
+    return SafeArea(
+      minimum: EdgeInsets.only(right: 16, bottom: bottomInset),
+      child: Align(
+        alignment: Alignment.bottomRight,
+        child: FloatingActionButton.small(
+          key: const Key('center-on-user'),
+          heroTag: null,
+          tooltip: 'Centrar em mim',
+          onPressed: isLoading ? null : onPressed,
+          backgroundColor: const Color(0xF21B2029),
+          foregroundColor: const Color(0xFFB7F34A),
+          disabledElevation: 2,
+          child: isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFB7F34A),
+                  ),
+                )
+              : Icon(
+                  isDenied
+                      ? Icons.location_disabled_rounded
+                      : Icons.my_location_rounded,
+                ),
+        ),
+      ),
     );
   }
 }

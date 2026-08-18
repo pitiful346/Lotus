@@ -5,6 +5,7 @@
 /// application bridge under `lib/custom_code/`.
 library;
 
+export 'src/application/use_cases/calculate_event_distance.dart';
 export 'src/domain/models/event.dart';
 export 'src/domain/models/event_category.dart';
 export 'src/domain/models/event_link.dart';

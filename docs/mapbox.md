@@ -34,6 +34,8 @@ restrições adequadas às aplicações Lotus.
   apresentados como pins personalizados;
 - tocar num pin apresenta um preview com imagem, nome, data, distância,
   categoria e acesso à página de detalhes;
+- o botão `Centrar em mim` pede permissão apenas após interação, obtém a
+  localização atual, apresenta o puck do utilizador e anima a câmara;
 - quando o token não existe, a aplicação mostra um estado de configuração em
   vez de criar um mapa inválido;
 - web e desktop mostram um fallback, porque a versão estável do SDK Mapbox
@@ -65,7 +67,12 @@ criados em batch, pins removidos são apagados em batch e apenas coordenadas ou
 estado de destaque alterados geram updates individuais. Alterações de título ou
 descrição não causam trabalho no renderer nativo.
 
-A distância usa a posição em cache ou uma posição conhecida quando a permissão
-já foi concedida. Abrir o mapa não força um novo pedido de permissão; sem
-localização, o preview indica que a distância está indisponível. O documento
-Firestore só é resolvido quando o utilizador escolhe `Ver detalhes`.
+A Home verifica silenciosamente uma permissão já concedida, mas abrir o mapa
+não apresenta um pedido de localização. O pedido do sistema só é iniciado ao
+tocar em `Centrar em mim`. Se o serviço estiver desligado ou a permissão tiver
+sido recusada permanentemente, a mensagem permite abrir as definições certas.
+
+A coordenada obtida é convertida para `GeoCoordinates` e as distâncias até aos
+eventos são calculadas no `lotus_core`, sem dependência de Mapbox ou Geolocator.
+Sem posição válida, o preview indica que a distância está indisponível. O
+documento Firestore só é resolvido quando o utilizador escolhe `Ver detalhes`.

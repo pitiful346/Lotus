@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 
+bool get isLotusHomeMapSupported => false;
+
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
+  required GeoCoordinates? userCoordinates,
+  required int centerOnUserRequest,
 }) => const _UnsupportedMapView();
 
 class _UnsupportedMapView extends StatelessWidget {

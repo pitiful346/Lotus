@@ -9,12 +9,15 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'event_pin_diff.dart';
 
 const _mapboxAccessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+bool get isLotusHomeMapSupported => Platform.isAndroid || Platform.isIOS;
 
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
+  required GeoCoordinates? userCoordinates,
+  required int centerOnUserRequest,
 }) {
-  if (!Platform.isAndroid && !Platform.isIOS) {
+  if (!isLotusHomeMapSupported) {
     return const _UnsupportedMapView();
   }
 
@@ -22,14 +25,26 @@ Widget buildLotusHomeMap({
     return const _MissingTokenView();
   }
 
-  return _NativeLotusHomeMap(events: events, onEventTap: onEventTap);
+  return _NativeLotusHomeMap(
+    events: events,
+    onEventTap: onEventTap,
+    userCoordinates: userCoordinates,
+    centerOnUserRequest: centerOnUserRequest,
+  );
 }
 
 class _NativeLotusHomeMap extends StatefulWidget {
-  const _NativeLotusHomeMap({required this.events, required this.onEventTap});
+  const _NativeLotusHomeMap({
+    required this.events,
+    required this.onEventTap,
+    required this.userCoordinates,
+    required this.centerOnUserRequest,
+  });
 
   final List<Event> events;
   final ValueChanged<String> onEventTap;
+  final GeoCoordinates? userCoordinates;
+  final int centerOnUserRequest;
 
   @override
   State<_NativeLotusHomeMap> createState() => _NativeLotusHomeMapState();
@@ -75,6 +90,12 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     if (!identical(oldWidget.events, widget.events)) {
       _requestPinSync();
     }
+    if (oldWidget.userCoordinates != widget.userCoordinates) {
+      _updateUserLocationSettings();
+    }
+    if (oldWidget.centerOnUserRequest != widget.centerOnUserRequest) {
+      _centerOnUser();
+    }
   }
 
   @override
@@ -93,6 +114,10 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   Future<void> _onMapCreated(MapboxMap mapboxMap) async {
     _mapboxMap = mapboxMap;
     _applyDarkStyle();
+    await _updateUserLocationSettings();
+    if (widget.centerOnUserRequest > 0) {
+      await _centerOnUser();
+    }
 
     final manager = await mapboxMap.annotations.createPointAnnotationManager(
       id: 'lotus-event-pins',
@@ -223,6 +248,43 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       'basemap',
       'lightPreset',
       'night',
+    );
+  }
+
+  Future<void> _updateUserLocationSettings() async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null) {
+      return;
+    }
+    final enabled = widget.userCoordinates != null;
+    await mapboxMap.location.updateSettings(
+      LocationComponentSettings(
+        enabled: enabled,
+        pulsingEnabled: enabled,
+        pulsingColor: 0xFFB7F34A,
+        showAccuracyRing: enabled,
+        puckBearingEnabled: enabled,
+        puckBearing: PuckBearing.HEADING,
+      ),
+    );
+  }
+
+  Future<void> _centerOnUser() async {
+    final mapboxMap = _mapboxMap;
+    final coordinates = widget.userCoordinates;
+    if (mapboxMap == null || coordinates == null) {
+      return;
+    }
+    await mapboxMap.flyTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(coordinates.longitude, coordinates.latitude),
+        ),
+        zoom: 15.5,
+        bearing: 0,
+        pitch: 0,
+      ),
+      MapAnimationOptions(duration: 900, startDelay: 0),
     );
   }
 
