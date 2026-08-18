@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -6,14 +7,21 @@ import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
-import 'event_pin_diff.dart';
-
 const _mapboxAccessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+const _eventSourceId = 'lotus-events';
+const _clusterLayerId = 'lotus-event-clusters';
+const _clusterCountLayerId = 'lotus-event-cluster-count';
+const _eventLayerId = 'lotus-event-pins';
+const _regularPinImageId = 'lotus-event-pin';
+const _featuredPinImageId = 'lotus-featured-event-pin';
+const _pinWidth = 88;
+const _pinHeight = 104;
 bool get isLotusHomeMapSupported => Platform.isAndroid || Platform.isIOS;
 
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
+  required ValueChanged<MapViewportBounds> onViewportChanged,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
 }) {
@@ -28,6 +36,7 @@ Widget buildLotusHomeMap({
   return _NativeLotusHomeMap(
     events: events,
     onEventTap: onEventTap,
+    onViewportChanged: onViewportChanged,
     userCoordinates: userCoordinates,
     centerOnUserRequest: centerOnUserRequest,
   );
@@ -37,12 +46,14 @@ class _NativeLotusHomeMap extends StatefulWidget {
   const _NativeLotusHomeMap({
     required this.events,
     required this.onEventTap,
+    required this.onViewportChanged,
     required this.userCoordinates,
     required this.centerOnUserRequest,
   });
 
   final List<Event> events;
   final ValueChanged<String> onEventTap;
+  final ValueChanged<MapViewportBounds> onViewportChanged;
   final GeoCoordinates? userCoordinates;
   final int centerOnUserRequest;
 
@@ -57,15 +68,11 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   );
 
   MapboxMap? _mapboxMap;
-  PointAnnotationManager? _pinManager;
-  Cancelable? _pinTapEvents;
-  final Map<String, PointAnnotation> _annotationsByEventId = {};
-  Map<String, EventPin> _renderedPins = const {};
-  Future<Uint8List>? _regularPinImage;
-  Future<Uint8List>? _featuredPinImage;
   bool _isForeground = true;
-  bool _isSyncingPins = false;
-  int _pinSyncVersion = 0;
+  bool _isStyleReady = false;
+  bool _isSyncingEvents = false;
+  bool _isReportingViewport = false;
+  int _eventSyncVersion = 0;
 
   @override
   void initState() {
@@ -88,7 +95,7 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   void didUpdateWidget(_NativeLotusHomeMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.events, widget.events)) {
-      _requestPinSync();
+      _requestEventSync();
     }
     if (oldWidget.userCoordinates != widget.userCoordinates) {
       _updateUserLocationSettings();
@@ -101,11 +108,6 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _pinTapEvents?.cancel();
-    _pinTapEvents = null;
-    _pinManager = null;
-    _annotationsByEventId.clear();
-    _renderedPins = const {};
     // MapWidget owns and disposes the native MapboxMap controller.
     _mapboxMap = null;
     super.dispose();
@@ -118,40 +120,22 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     if (widget.centerOnUserRequest > 0) {
       await _centerOnUser();
     }
-
-    final manager = await mapboxMap.annotations.createPointAnnotationManager(
-      id: 'lotus-event-pins',
-    );
-    if (!mounted || _mapboxMap != mapboxMap) {
-      return;
-    }
-
-    _pinManager = manager;
-    _pinTapEvents = manager.tapEvents(onTap: _onPinTap);
-    _requestPinSync();
   }
 
-  void _onPinTap(PointAnnotation annotation) {
-    final eventId = annotation.customData?['eventId'];
-    if (eventId is String) {
-      widget.onEventTap(eventId);
+  void _requestEventSync() {
+    _eventSyncVersion += 1;
+    if (!_isSyncingEvents && _isStyleReady) {
+      _drainEventSyncQueue();
     }
   }
 
-  void _requestPinSync() {
-    _pinSyncVersion += 1;
-    if (!_isSyncingPins && _pinManager != null) {
-      _drainPinSyncQueue();
-    }
-  }
-
-  Future<void> _drainPinSyncQueue() async {
-    _isSyncingPins = true;
+  Future<void> _drainEventSyncQueue() async {
+    _isSyncingEvents = true;
     try {
-      while (mounted && _pinManager != null) {
-        final version = _pinSyncVersion;
-        await _syncPins();
-        if (version == _pinSyncVersion) {
+      while (mounted && _isStyleReady) {
+        final version = _eventSyncVersion;
+        await _syncEventSource();
+        if (version == _eventSyncVersion) {
           break;
         }
       }
@@ -161,81 +145,167 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
           exception: error,
           stack: stackTrace,
           library: 'lotus event map',
-          context: ErrorDescription('while synchronizing event pins'),
+          context: ErrorDescription('while synchronizing clustered events'),
         ),
       );
     } finally {
-      _isSyncingPins = false;
+      _isSyncingEvents = false;
     }
   }
 
-  Future<void> _syncPins() async {
-    final manager = _pinManager;
-    if (manager == null) {
+  Future<void> _syncEventSource() async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null || !_isStyleReady) {
+      return;
+    }
+    final source = await mapboxMap.style.getSource(_eventSourceId);
+    if (source is GeoJsonSource) {
+      await source.updateGeoJSON(_eventFeatureCollection(widget.events));
+    }
+  }
+
+  Future<void> _onStyleLoaded() async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null) {
+      return;
+    }
+    _isStyleReady = false;
+    await _applyDarkStyle();
+
+    await _addPinImage(mapboxMap, id: _regularPinImageId, isFeatured: false);
+    await _addPinImage(mapboxMap, id: _featuredPinImageId, isFeatured: true);
+
+    if (!await mapboxMap.style.styleSourceExists(_eventSourceId)) {
+      await mapboxMap.style.addSource(
+        GeoJsonSource(
+          id: _eventSourceId,
+          data: _eventFeatureCollection(widget.events),
+          cluster: true,
+          clusterRadius: 52,
+          clusterMaxZoom: 14,
+          clusterMinPoints: 3,
+        ),
+      );
+    }
+    await _addLayerIfMissing(mapboxMap, _clusterLayer());
+    await _addLayerIfMissing(mapboxMap, _clusterCountLayer());
+    await _addLayerIfMissing(mapboxMap, _unclusteredEventLayer());
+
+    if (!mounted || _mapboxMap != mapboxMap) {
+      return;
+    }
+    _isStyleReady = true;
+    _requestEventSync();
+  }
+
+  Future<void> _addPinImage(
+    MapboxMap mapboxMap, {
+    required String id,
+    required bool isFeatured,
+  }) async {
+    if (await mapboxMap.style.hasStyleImage(id)) {
+      return;
+    }
+    await mapboxMap.style.addStyleImage(
+      id,
+      1,
+      MbxImage(
+        width: _pinWidth,
+        height: _pinHeight,
+        data: await _renderPinImage(isFeatured: isFeatured),
+      ),
+      false,
+      const [],
+      const [],
+      null,
+    );
+  }
+
+  Future<void> _addLayerIfMissing(
+    MapboxMap mapboxMap,
+    Map<String, Object> layer,
+  ) async {
+    final id = layer['id']! as String;
+    if (!await mapboxMap.style.styleLayerExists(id)) {
+      await mapboxMap.style.addStyleLayer(jsonEncode(layer), null);
+    }
+  }
+
+  Future<void> _onMapTap(MapContentGestureContext context) async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null || !_isStyleReady) {
+      return;
+    }
+    final features = await mapboxMap.queryRenderedFeatures(
+      RenderedQueryGeometry.fromScreenCoordinate(context.touchPosition),
+      RenderedQueryOptions(
+        layerIds: const [_clusterLayerId, _eventLayerId],
+        filter: null,
+      ),
+    );
+    QueriedRenderedFeature? result;
+    for (final feature in features) {
+      if (feature != null) {
+        result = feature;
+        break;
+      }
+    }
+    if (result == null) {
       return;
     }
 
-    final changes = diffEventPins(
-      previous: _renderedPins,
-      events: widget.events,
-    );
-
-    final annotationsToRemove = changes.removedEventIds
-        .map(_annotationsByEventId.remove)
-        .whereType<PointAnnotation>()
-        .toList(growable: false);
-    if (annotationsToRemove.isNotEmpty) {
-      await manager.deleteMulti(annotationsToRemove);
+    if (result.layers.contains(_clusterLayerId)) {
+      final camera = await mapboxMap.getCameraState();
+      await mapboxMap.easeTo(
+        CameraOptions(
+          center: context.point,
+          zoom: (camera.zoom + 2).clamp(0, 16).toDouble(),
+        ),
+        MapAnimationOptions(duration: 500, startDelay: 0),
+      );
+      return;
     }
 
-    await Future.wait(
-      changes.updated.map((pin) async {
-        final annotation = _annotationsByEventId[pin.eventId];
-        if (annotation == null) {
-          return;
-        }
-        annotation
-          ..geometry = _pointFor(pin)
-          ..image = await _pinImage(pin.isFeatured)
-          ..iconSize = pin.isFeatured ? 0.62 : 0.55
-          ..symbolSortKey = pin.isFeatured ? 0 : 1;
-        await manager.update(annotation);
-      }),
-    );
-
-    if (changes.added.isNotEmpty) {
-      final options = await Future.wait(changes.added.map(_optionsForPin));
-      final annotations = await manager.createMulti(options);
-      for (var index = 0; index < changes.added.length; index += 1) {
-        final annotation = annotations[index];
-        if (annotation != null) {
-          _annotationsByEventId[changes.added[index].eventId] = annotation;
-        }
+    final properties = result.queriedFeature.feature['properties'];
+    if (properties is Map) {
+      final eventId = properties['eventId'];
+      if (eventId is String) {
+        widget.onEventTap(eventId);
       }
     }
-
-    _renderedPins = changes.current;
   }
 
-  Future<PointAnnotationOptions> _optionsForPin(EventPin pin) async {
-    return PointAnnotationOptions(
-      geometry: _pointFor(pin),
-      image: await _pinImage(pin.isFeatured),
-      iconAnchor: IconAnchor.BOTTOM,
-      iconSize: pin.isFeatured ? 0.62 : 0.55,
-      symbolSortKey: pin.isFeatured ? 0 : 1,
-      customData: {'eventId': pin.eventId},
-    );
-  }
-
-  Point _pointFor(EventPin pin) =>
-      Point(coordinates: Position(pin.longitude, pin.latitude));
-
-  Future<Uint8List> _pinImage(bool isFeatured) {
-    if (isFeatured) {
-      return _featuredPinImage ??= _renderPinImage(isFeatured: true);
+  Future<void> _reportViewport() async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null || _isReportingViewport) {
+      return;
     }
-    return _regularPinImage ??= _renderPinImage(isFeatured: false);
+    _isReportingViewport = true;
+    try {
+      final camera = await mapboxMap.getCameraState();
+      final bounds = await mapboxMap.coordinateBoundsForCamera(
+        CameraOptions(
+          center: camera.center,
+          padding: camera.padding,
+          zoom: camera.zoom,
+          bearing: camera.bearing,
+          pitch: camera.pitch,
+        ),
+      );
+      if (!mounted || bounds.infiniteBounds) {
+        return;
+      }
+      widget.onViewportChanged(
+        MapViewportBounds(
+          south: bounds.southwest.coordinates.lat.toDouble(),
+          west: bounds.southwest.coordinates.lng.toDouble(),
+          north: bounds.northeast.coordinates.lat.toDouble(),
+          east: bounds.northeast.coordinates.lng.toDouble(),
+        ),
+      );
+    } finally {
+      _isReportingViewport = false;
+    }
   }
 
   Future<void> _applyDarkStyle() async {
@@ -301,10 +371,101 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       ),
       textureView: true,
       onMapCreated: _onMapCreated,
-      onStyleLoadedListener: (_) => _applyDarkStyle(),
+      onStyleLoadedListener: (_) => _onStyleLoaded(),
+      onMapIdleListener: (_) => _reportViewport(),
+      // The SDK keeps this callback for compatibility while typed layer
+      // interactions mature; querying only Lotus layers keeps the hit test
+      // narrow and deterministic.
+      // ignore: deprecated_member_use
+      onTapListener: _onMapTap,
     );
   }
 }
+
+String _eventFeatureCollection(List<Event> events) {
+  return jsonEncode({
+    'type': 'FeatureCollection',
+    'features': [
+      for (final event in events)
+        if (event.location.coordinates case final coordinates?)
+          {
+            'type': 'Feature',
+            'properties': {'eventId': event.id, 'featured': event.isFeatured},
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [coordinates.longitude, coordinates.latitude],
+            },
+          },
+    ],
+  });
+}
+
+Map<String, Object> _clusterLayer() => {
+  'id': _clusterLayerId,
+  'type': 'circle',
+  'source': _eventSourceId,
+  'filter': ['has', 'point_count'],
+  'paint': {
+    'circle-color': '#B7F34A',
+    'circle-radius': [
+      'step',
+      ['get', 'point_count'],
+      19,
+      10,
+      24,
+      40,
+      30,
+    ],
+    'circle-stroke-width': 3,
+    'circle-stroke-color': '#11161D',
+  },
+};
+
+Map<String, Object> _clusterCountLayer() => {
+  'id': _clusterCountLayerId,
+  'type': 'symbol',
+  'source': _eventSourceId,
+  'filter': ['has', 'point_count'],
+  'layout': {
+    'text-field': ['get', 'point_count_abbreviated'],
+    'text-size': 12,
+  },
+  'paint': {'text-color': '#11161D'},
+};
+
+Map<String, Object> _unclusteredEventLayer() => {
+  'id': _eventLayerId,
+  'type': 'symbol',
+  'source': _eventSourceId,
+  'filter': [
+    '!',
+    ['has', 'point_count'],
+  ],
+  'layout': {
+    'icon-image': [
+      'case',
+      [
+        '==',
+        ['get', 'featured'],
+        true,
+      ],
+      _featuredPinImageId,
+      _regularPinImageId,
+    ],
+    'icon-anchor': 'bottom',
+    'icon-size': [
+      'case',
+      [
+        '==',
+        ['get', 'featured'],
+        true,
+      ],
+      0.62,
+      0.55,
+    ],
+    'icon-allow-overlap': true,
+  },
+};
 
 Future<Uint8List> _renderPinImage({required bool isFeatured}) async {
   const width = 88.0;
@@ -338,7 +499,7 @@ Future<Uint8List> _renderPinImage({required bool isFeatured}) async {
 
   final picture = recorder.endRecording();
   final image = await picture.toImage(width.toInt(), height.toInt());
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   image.dispose();
   picture.dispose();
   if (bytes == null) {

@@ -32,6 +32,10 @@ restrições adequadas às aplicações Lotus.
   regressar ao foreground;
 - os eventos válidos do Firestore são convertidos para o modelo de domínio e
   apresentados como pins personalizados;
+- a área inicial é carregada uma vez; depois de mover a câmara, o botão
+  `Pesquisar nesta área` inicia explicitamente uma nova pesquisa;
+- apenas eventos dentro do viewport são mostrados e os resultados são
+  agrupados em clusters até ao zoom `14`;
 - tocar num pin apresenta um preview com imagem, nome, data, distância,
   categoria e acesso à página de detalhes;
 - o botão `Centrar em mim` pede permissão apenas após interação, obtém a
@@ -55,17 +59,24 @@ Não é necessário guardar o token em `AndroidManifest.xml`, `Info.plist` ou
 ficheiros de configuração locais. A atribuição é feita antes da criação do
 `MapWidget` através de `MapboxOptions.setAccessToken`.
 
-## Performance
+## Pesquisa e performance
 
-O widget usa uma chave estável, não subscreve eventos contínuos de câmara ou de
-renderização e não reconstrói a plataforma nativa em pausas da aplicação. Para
-eventos futuros em volume, preferir sources/layers do estilo a uma annotation
-Flutter por evento.
+O widget usa uma chave estável e não reconstrói a plataforma nativa em pausas
+da aplicação. O evento `map idle` serve apenas para guardar o viewport atual:
+arrastar ou ampliar o mapa não provoca leituras Firestore. A pesquisa tem um
+limite rígido de 250 candidatos e substitui os resultados anteriores.
 
-As atualizações correntes calculam diferenças por `Event.id`: pins novos são
-criados em batch, pins removidos são apagados em batch e apenas coordenadas ou
-estado de destaque alterados geram updates individuais. Alterações de título ou
-descrição não causam trabalho no renderer nativo.
+Os pins vivem num único GeoJSON source do estilo Mapbox. Alterar resultados
+atualiza esse source uma vez; o clustering e a renderização ficam no SDK nativo,
+sem criar uma annotation Flutter por evento. Tocar num cluster aproxima a
+câmara; tocar num pin mantém o preview existente.
+
+O schema FlutterFlow atual tem apenas o GeoPoint `coordenadas`. Por isso a query
+reduz os candidatos no servidor pela latitude, aplica o limite e só depois
+confirma longitude e viewport no caso de uso. Isto já evita carregar toda a
+coleção. Para escala metropolitana/nacional, a migração seguinte deve adicionar
+um campo `geohash` e consultar os seus intervalos, seguindo a solução oficial de
+[geoqueries do Firestore](https://firebase.google.com/docs/firestore/solutions/geoqueries).
 
 A Home verifica silenciosamente uma permissão já concedida, mas abrir o mapa
 não apresenta um pedido de localização. O pedido do sistema só é iniciado ao

@@ -6,6 +6,7 @@ bool get isLotusHomeMapSupported => false;
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
+  required ValueChanged<MapViewportBounds> onViewportChanged,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
 }) => const _UnsupportedMapView();

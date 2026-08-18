@@ -6,6 +6,7 @@
 library;
 
 export 'src/application/use_cases/calculate_event_distance.dart';
+export 'src/application/use_cases/load_events_in_viewport.dart';
 export 'src/domain/models/event.dart';
 export 'src/domain/models/event_category.dart';
 export 'src/domain/models/event_link.dart';
@@ -13,3 +14,5 @@ export 'src/domain/models/event_location.dart';
 export 'src/domain/models/event_organizer.dart';
 export 'src/domain/models/event_price.dart';
 export 'src/domain/models/geo_coordinates.dart';
+export 'src/domain/models/map_viewport_bounds.dart';
+export 'src/domain/repositories/map_event_repository.dart';

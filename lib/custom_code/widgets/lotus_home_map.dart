@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 import '/pages/event_details/event_details_widget.dart';
 import 'package:lotus_core/lotus_core.dart';
 
-import '../event_mapping/events_record_to_event.dart';
+import '../event_mapping/firestore_map_event_repository.dart';
 import '../location/user_location_controller.dart';
 import 'event_map_preview_card.dart';
 import 'lotus_home_map_platform_stub.dart'
@@ -29,6 +29,7 @@ class LotusHomeMap extends StatefulWidget {
     this.onEventTap,
     this.onOpenEvent,
     this.locationController,
+    this.eventRepository,
   });
 
   /// Injectable for tests and future repository implementations.
@@ -36,15 +37,22 @@ class LotusHomeMap extends StatefulWidget {
   final ValueChanged<Event>? onEventTap;
   final ValueChanged<Event>? onOpenEvent;
   final UserLocationController? locationController;
+  final MapEventRepository? eventRepository;
 
   @override
   State<LotusHomeMap> createState() => _LotusHomeMapState();
 }
 
 class _LotusHomeMapState extends State<LotusHomeMap> {
-  late Stream<List<Event>> _eventStream;
   late UserLocationController _locationController;
   late bool _ownsLocationController;
+  late MapEventRepository _eventRepository;
+  List<Event> _events = const [];
+  MapViewportBounds? _pendingViewport;
+  MapViewportBounds? _searchedViewport;
+  bool _isLoadingEvents = false;
+  bool _hasEventError = false;
+  int _eventRequestVersion = 0;
   String? _selectedEventId;
   String? _openingEventId;
   int _centerOnUserRequest = 0;
@@ -52,7 +60,8 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   @override
   void initState() {
     super.initState();
-    _eventStream = widget.eventStream ?? watchMapEvents();
+    _eventRepository =
+        widget.eventRepository ?? const FirestoreMapEventRepository();
     _attachLocationController();
   }
 
@@ -60,8 +69,18 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   void didUpdateWidget(LotusHomeMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.eventStream != widget.eventStream) {
-      _eventStream = widget.eventStream ?? watchMapEvents();
+      _eventRequestVersion += 1;
+      _isLoadingEvents = false;
       _selectedEventId = null;
+    }
+    if (oldWidget.eventRepository != widget.eventRepository) {
+      _eventRequestVersion += 1;
+      _eventRepository =
+          widget.eventRepository ?? const FirestoreMapEventRepository();
+      _events = const [];
+      _searchedViewport = null;
+      _isLoadingEvents = false;
+      _hasEventError = false;
     }
     if (oldWidget.locationController != widget.locationController) {
       _detachLocationController();
@@ -111,6 +130,54 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     }
     setState(() => _selectedEventId = eventId);
     widget.onEventTap?.call(event);
+  }
+
+  void _handleViewportChanged(MapViewportBounds bounds) {
+    if (widget.eventStream != null ||
+        _pendingViewport?.isApproximatelyEqualTo(bounds) == true) {
+      return;
+    }
+    setState(() => _pendingViewport = bounds);
+    if (_searchedViewport == null && !_isLoadingEvents) {
+      _searchPendingViewport();
+    }
+  }
+
+  Future<void> _searchPendingViewport() async {
+    final bounds = _pendingViewport;
+    if (bounds == null || _isLoadingEvents) {
+      return;
+    }
+    final requestVersion = ++_eventRequestVersion;
+    setState(() {
+      _isLoadingEvents = true;
+      _hasEventError = false;
+    });
+
+    try {
+      final events = await LoadEventsInViewport(repository: _eventRepository)(
+        bounds,
+      );
+      if (!mounted || requestVersion != _eventRequestVersion) {
+        return;
+      }
+      setState(() {
+        _events = events;
+        _searchedViewport = bounds;
+        _isLoadingEvents = false;
+        _selectedEventId = events.any((event) => event.id == _selectedEventId)
+            ? _selectedEventId
+            : null;
+      });
+    } catch (_) {
+      if (!mounted || requestVersion != _eventRequestVersion) {
+        return;
+      }
+      setState(() {
+        _isLoadingEvents = false;
+        _hasEventError = true;
+      });
+    }
   }
 
   double? _distanceTo(Event event) {
@@ -201,44 +268,104 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
 
   @override
   Widget build(BuildContext context) {
+    final stream = widget.eventStream;
+    if (stream == null) {
+      return _buildMap(
+        events: _events,
+        isLoading: _isLoadingEvents,
+        hasError: _hasEventError,
+        showSearchButton: _shouldShowSearchButton,
+      );
+    }
     return StreamBuilder<List<Event>>(
-      stream: _eventStream,
+      stream: stream,
       initialData: const [],
       builder: (context, snapshot) {
-        final events = snapshot.data ?? const <Event>[];
-        final eventsById = {for (final event in events) event.id: event};
-        final selectedEvent = eventsById[_selectedEventId];
-        final locationState = _locationController.state;
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            platform.buildLotusHomeMap(
-              events: events,
-              onEventTap: (eventId) => _selectEvent(eventId, eventsById),
-              userCoordinates: locationState.coordinates,
-              centerOnUserRequest: _centerOnUserRequest,
-            ),
-            if (snapshot.connectionState == ConnectionState.waiting)
-              const _MapLoadingIndicator(),
-            if (snapshot.hasError) const _MapErrorIndicator(),
-            if (_supportsLocation)
-              _CenterOnUserButton(
-                status: locationState.status,
-                bottomInset: selectedEvent == null ? 24 : 218,
-                onPressed: _centerOnUser,
-              ),
-            if (selectedEvent != null)
-              EventMapPreviewCard(
-                event: selectedEvent,
-                distanceMeters: _distanceTo(selectedEvent),
-                isOpening: _openingEventId == selectedEvent.id,
-                onClose: () => setState(() => _selectedEventId = null),
-                onOpenDetails: () => _openEventDetails(selectedEvent),
-              ),
-          ],
+        return _buildMap(
+          events: snapshot.data ?? const <Event>[],
+          isLoading: snapshot.connectionState == ConnectionState.waiting,
+          hasError: snapshot.hasError,
+          showSearchButton: false,
         );
       },
+    );
+  }
+
+  bool get _shouldShowSearchButton {
+    final pending = _pendingViewport;
+    final searched = _searchedViewport;
+    return !_isLoadingEvents &&
+        pending != null &&
+        (searched == null || !pending.isApproximatelyEqualTo(searched));
+  }
+
+  Widget _buildMap({
+    required List<Event> events,
+    required bool isLoading,
+    required bool hasError,
+    required bool showSearchButton,
+  }) {
+    final eventsById = {for (final event in events) event.id: event};
+    final selectedEvent = eventsById[_selectedEventId];
+    final locationState = _locationController.state;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        platform.buildLotusHomeMap(
+          events: events,
+          onEventTap: (eventId) => _selectEvent(eventId, eventsById),
+          onViewportChanged: _handleViewportChanged,
+          userCoordinates: locationState.coordinates,
+          centerOnUserRequest: _centerOnUserRequest,
+        ),
+        if (isLoading) const _MapLoadingIndicator(),
+        if (hasError) const _MapErrorIndicator(),
+        if (showSearchButton)
+          _SearchThisAreaButton(onPressed: _searchPendingViewport),
+        if (_supportsLocation)
+          _CenterOnUserButton(
+            status: locationState.status,
+            bottomInset: selectedEvent == null ? 24 : 218,
+            onPressed: _centerOnUser,
+          ),
+        if (selectedEvent != null)
+          EventMapPreviewCard(
+            event: selectedEvent,
+            distanceMeters: _distanceTo(selectedEvent),
+            isOpening: _openingEventId == selectedEvent.id,
+            onClose: () => setState(() => _selectedEventId = null),
+            onOpenDetails: () => _openEventDetails(selectedEvent),
+          ),
+      ],
+    );
+  }
+}
+
+class _SearchThisAreaButton extends StatelessWidget {
+  const _SearchThisAreaButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      minimum: const EdgeInsets.only(top: 16),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: FilledButton.icon(
+          key: const Key('search-this-area'),
+          onPressed: onPressed,
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('Pesquisar nesta área'),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xF21B2029),
+            foregroundColor: Colors.white,
+            elevation: 5,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+          ),
+        ),
+      ),
     );
   }
 }
