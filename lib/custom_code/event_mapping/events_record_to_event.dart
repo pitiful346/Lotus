@@ -7,7 +7,7 @@ Stream<List<Event>> watchMapEvents() {
     final events = <Event>[];
     for (final record in records) {
       final event = eventFromRecord(record);
-      if (event != null) {
+      if (event != null && event.location.coordinates != null) {
         events.add(event);
       }
     }
@@ -18,17 +18,15 @@ Stream<List<Event>> watchMapEvents() {
 
 /// Converts the generated Firestore model at the application boundary.
 ///
-/// Invalid, archived, undated, or unpositioned records are omitted so a
-/// single legacy document cannot prevent the remaining pins from rendering.
-Event? eventFromRecord(EventsRecord record) {
+/// Invalid, archived, or undated records are omitted so a single legacy
+/// document cannot prevent the remaining event views from rendering. Map
+/// streams additionally omit events without coordinates.
+Event? eventFromRecord(EventsRecord record, {EventOrganizer? organizer}) {
   final coordinates = record.coordenadas;
   final startsAt = record.startDate;
   final title = record.name.trim();
 
-  if (record.isArchived ||
-      coordinates == null ||
-      startsAt == null ||
-      title.isEmpty) {
+  if (record.isArchived || startsAt == null || title.isEmpty) {
     return null;
   }
 
@@ -60,15 +58,18 @@ Event? eventFromRecord(EventsRecord record) {
       location: EventLocation(
         displayName: locationName,
         venueName: _optionalText(record.venueName),
-        coordinates: GeoCoordinates(
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
-        ),
+        coordinates: coordinates == null
+            ? null
+            : GeoCoordinates(
+                latitude: coordinates.latitude,
+                longitude: coordinates.longitude,
+              ),
       ),
       startsAt: startsAt,
       endsAt: record.endDate,
       imageUri: _absoluteUri(record.image),
       price: _priceFromRecord(record),
+      organizer: organizer,
       links: _linksFromRecord(record),
       status: EventStatus.published,
       ticketAvailability: _ticketAvailability(record.ticketStatus),
@@ -77,6 +78,15 @@ Event? eventFromRecord(EventsRecord record) {
   } on ArgumentError {
     return null;
   }
+}
+
+/// Converts the legacy user document referenced by `organizer_id`.
+EventOrganizer eventOrganizerFromRecord(UsersRecord record) {
+  return EventOrganizer(
+    id: record.reference.path,
+    name: _firstNonEmpty([record.displayName, 'Organizador']),
+    imageUri: _absoluteUri(record.photoUrl),
+  );
 }
 
 EventPrice _priceFromRecord(EventsRecord record) {
