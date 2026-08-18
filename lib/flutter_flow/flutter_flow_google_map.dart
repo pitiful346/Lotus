@@ -158,9 +158,10 @@ class _FlutterFlowGoogleMapState extends State<FlutterFlowGoogleMap> {
           .addListener(ImageStreamListener((img, _) async {
         final bytes = await img.image.toByteData(format: ImageByteFormat.png);
         if (bytes != null && mounted) {
-          _markerDescriptor = BitmapDescriptor.fromBytes(
+          _markerDescriptor = BitmapDescriptor.bytes(
             bytes.buffer.asUint8List(),
-            size: markerImageSize,
+            width: markerImageSize.width,
+            height: markerImageSize.height,
           );
           setState(() {});
         }
@@ -197,9 +198,9 @@ class _FlutterFlowGoogleMapState extends State<FlutterFlowGoogleMap> {
     final googleMapWidget = AbsorbPointer(
       absorbing: !widget.allowInteraction,
       child: GoogleMap(
-        onMapCreated: (controller) async {
+        style: googleMapStyleStrings[widget.style],
+        onMapCreated: (controller) {
           _controller.complete(controller);
-          await controller.setMapStyle(googleMapStyleStrings[widget.style]);
         },
         onCameraIdle: onCameraIdle,
         onCameraMove: (position) => currentMapCenter = position.target,

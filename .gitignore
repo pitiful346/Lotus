@@ -1,0 +1,23 @@
+# Dart and Flutter tooling
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+build/
+coverage/
+
+# Android tooling
+android/.gradle/
+android/local.properties
+
+# Apple tooling
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Pods/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+.DS_Store

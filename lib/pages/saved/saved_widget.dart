@@ -160,10 +160,6 @@ class _SavedWidgetState extends State<SavedWidget> {
                                     ),
                                   );
                                 }
-
-                                final masonryEventCard2EventsRecord =
-                                    snapshot.data!;
-
                                 return MasonryEventCard2Widget(
                                   key: Key(
                                       'Keyev7_${meusFavoritosIndex}_of_${meusFavoritos.length}'),

@@ -1,3 +1,7 @@
+// FlutterFlow keeps these imports in custom widget exports, even when a
+// particular widget does not use all of them.
+// ignore_for_file: unnecessary_import, unused_import
+
 // Automatic FlutterFlow imports
 import '/backend/backend.dart';
 import '/flutter_flow/flutter_flow_theme.dart';

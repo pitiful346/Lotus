@@ -25,6 +25,9 @@ class LotusFirebaseUser extends BaseAuthUser {
   @override
   Future? updateEmail(String email) async {
     try {
+      // Preserve the immediate-update behavior expected by the generated
+      // authentication manager until that flow is migrated end to end.
+      // ignore: deprecated_member_use
       await user?.updateEmail(email);
     } catch (_) {
       await user?.verifyBeforeUpdateEmail(email);
