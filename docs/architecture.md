@@ -45,7 +45,8 @@ O código que deve sobreviver aos exports vive em `packages/lotus_core/`:
 packages/lotus_core/lib/src/
 ├── domain/
 │   ├── models/          modelos e value objects sem Flutter/Firebase
-│   └── repositories/    contratos de acesso a dados
+│   ├── repositories/    contratos de acesso a dados
+│   └── services/        contratos de capacidades substituíveis
 ├── application/
 │   └── use_cases/       regras e orquestração da aplicação
 └── infrastructure/

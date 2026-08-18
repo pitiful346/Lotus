@@ -65,6 +65,47 @@ void main() {
     expect(find.text('Música'), findsOneWidget);
     expect(repository.loadCalls, 1);
   });
+
+  testWidgets('search UI explains and applies a natural query', (tester) async {
+    final now = DateTime(2026, 8, 18, 12);
+    final repository = _FakeSearchRepository([
+      _naturalEvent(
+        'techno-porto',
+        title: 'Techno Garden',
+        city: 'Porto',
+        startsAt: DateTime(2026, 8, 19, 22),
+      ),
+      _naturalEvent(
+        'techno-lisboa',
+        title: 'Techno Lisboa',
+        city: 'Lisboa',
+        startsAt: DateTime(2026, 8, 19, 22),
+      ),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LotusEventSearch(
+          repository: repository,
+          debounceDuration: Duration.zero,
+          onOpenEvent: (_) {},
+          now: () => now,
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('event-search-field')),
+      'quero techno amanhã à noite no Porto',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Amanhã'), findsOneWidget);
+    expect(find.text('Noite'), findsOneWidget);
+    expect(find.text('Porto'), findsOneWidget);
+    expect(find.text('Música'), findsOneWidget);
+    expect(find.text('Techno Garden'), findsOneWidget);
+    expect(find.text('Techno Lisboa'), findsNothing);
+  });
 }
 
 final class _FakeSearchRepository implements EventSearchRepository {
@@ -111,3 +152,17 @@ Event _event(
     organizer: EventOrganizer(id: organizer, name: organizer),
   );
 }
+
+Event _naturalEvent(
+  String id, {
+  required String title,
+  required String city,
+  required DateTime startsAt,
+}) => Event(
+  id: 'events/$id',
+  title: title,
+  description: 'Techno',
+  categories: [EventCategory(id: 'Música', label: 'Música')],
+  location: EventLocation(displayName: city, city: city),
+  startsAt: startsAt,
+);

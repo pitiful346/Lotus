@@ -12,18 +12,22 @@ const _background = Color(0xFF080B10);
 const _surface = Color(0xFF151B23);
 const _accent = Color(0xFFB7F34A);
 
-/// Conventional, bounded search for events and their main facets.
+/// Bounded conventional and structured natural-language event search.
 class LotusEventSearch extends StatefulWidget {
   const LotusEventSearch({
     super.key,
     this.repository,
     this.debounceDuration = const Duration(milliseconds: 350),
     this.onOpenEvent,
+    this.interpreter,
+    this.now,
   });
 
   final EventSearchRepository? repository;
   final Duration debounceDuration;
   final ValueChanged<Event>? onOpenEvent;
+  final NaturalEventQueryInterpreter? interpreter;
+  final DateTime Function()? now;
 
   @override
   State<LotusEventSearch> createState() => _LotusEventSearchState();
@@ -33,11 +37,13 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
   static const _corpusLimit = 200;
 
   late EventSearchRepository _repository;
+  late NaturalEventQueryInterpreter _interpreter;
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
   List<Event>? _corpus;
   List<EventSearchResult> _results = const [];
+  NaturalEventQuery? _interpretation;
   bool _isLoading = false;
   bool _hasError = false;
   int _searchVersion = 0;
@@ -46,6 +52,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
   void initState() {
     super.initState();
     _repository = widget.repository ?? FirestoreEventSearchRepository();
+    _interpreter = widget.interpreter ?? const ParseNaturalEventQuery();
   }
 
   @override
@@ -56,6 +63,10 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
       _corpus = null;
       _results = const [];
       _searchVersion += 1;
+    }
+    if (oldWidget.interpreter != widget.interpreter) {
+      _interpreter = widget.interpreter ?? const ParseNaturalEventQuery();
+      _interpretation = null;
     }
   }
 
@@ -76,6 +87,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
         _results = const [];
         _isLoading = false;
         _hasError = false;
+        _interpretation = null;
       });
       return;
     }
@@ -88,6 +100,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
       _isLoading = true;
       _hasError = false;
       _results = const [];
+      _interpretation = null;
     });
     try {
       final corpus =
@@ -96,8 +109,26 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
         return;
       }
       _corpus = corpus;
+      final interpretation = _interpreter.interpret(
+        query,
+        now: widget.now?.call() ?? DateTime.now(),
+      );
       setState(() {
-        _results = SearchEvents()(corpus, query);
+        _interpretation = interpretation.requiresStructuredSearch
+            ? interpretation
+            : null;
+        _results = interpretation.requiresStructuredSearch
+            ? const SearchEventsNaturally()(corpus, interpretation)
+                  .map(
+                    (event) => EventSearchResult(
+                      type: EventSearchResultType.event,
+                      key: event.id,
+                      title: event.title,
+                      events: [event],
+                    ),
+                  )
+                  .toList(growable: false)
+            : SearchEvents()(corpus, query);
         _isLoading = false;
       });
     } catch (_) {
@@ -108,6 +139,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
         _isLoading = false;
         _hasError = true;
         _results = const [];
+        _interpretation = null;
       });
     }
   }
@@ -221,7 +253,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
                 textInputAction: TextInputAction.search,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Eventos, locais, artistas ou categorias',
+                  hintText: 'Ex.: techno amanhã à noite no Porto',
                   hintStyle: const TextStyle(color: Color(0xFF8795A6)),
                   prefixIcon: const Icon(Icons.search_rounded, color: _accent),
                   suffixIcon: hasQuery
@@ -240,6 +272,8 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
                 ),
               ),
             ),
+            if (_interpretation case final interpretation?)
+              _StructuredQueryChips(query: interpretation),
             if (_isLoading)
               const LinearProgressIndicator(
                 minHeight: 2,
@@ -319,11 +353,101 @@ class _SearchIntroduction extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF9AA8B8)),
             ),
+            SizedBox(height: 6),
+            Text(
+              'Também podes escrever: “quero techno amanhã à noite no Porto”.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Color(0xFF778698)),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _StructuredQueryChips extends StatelessWidget {
+  const _StructuredQueryChips({required this.query});
+
+  final NaturalEventQuery query;
+
+  @override
+  Widget build(BuildContext context) {
+    final labels = <String>{
+      if (query.dateStart != null) _dateLabel(query),
+      if (query.dayPeriod != null) _periodLabel(query.dayPeriod!),
+      ...query.locationTerms.map(_displayToken),
+      ...query.categoryIds.map(_categoryLabel),
+      ...query.keywordTokens.map(_displayToken),
+      if (query.freeOnly) 'Gratuitos',
+      if (query.maximumPriceMinorUnits case final price?)
+        'Até ${(price / 100).round()} €',
+    }.toList(growable: false);
+    return SizedBox(
+      height: 42,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        scrollDirection: Axis.horizontal,
+        itemCount: labels.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (context, index) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF223020),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFF47652D)),
+          ),
+          child: Text(
+            labels[index],
+            style: const TextStyle(
+              color: _accent,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _dateLabel(NaturalEventQuery query) {
+  final normalized = canonicalFilterValue(query.originalText);
+  if (normalized.contains('depois-de-amanha')) {
+    return 'Depois de amanhã';
+  }
+  if (normalized.contains('amanha')) {
+    return 'Amanhã';
+  }
+  if (normalized.contains('hoje')) {
+    return 'Hoje';
+  }
+  if (normalized.contains('fim-de-semana')) {
+    return 'Fim de semana';
+  }
+  return 'Data escolhida';
+}
+
+String _periodLabel(EventDayPeriod period) => switch (period) {
+  EventDayPeriod.earlyMorning => 'Madrugada',
+  EventDayPeriod.morning => 'Manhã',
+  EventDayPeriod.afternoon => 'Tarde',
+  EventDayPeriod.night => 'Noite',
+};
+
+String _categoryLabel(String value) => switch (value) {
+  'musica' => 'Música',
+  'festas' => 'Festas',
+  'cultura' => 'Cultura',
+  'desporto' => 'Desporto',
+  _ => _displayToken(value),
+};
+
+String _displayToken(String value) {
+  final words = value.split('-').where((word) => word.isNotEmpty);
+  return words
+      .map((word) => '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
 }
 
 class _ResultSectionTitle extends StatelessWidget {

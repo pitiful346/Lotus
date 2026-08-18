@@ -24,3 +24,10 @@ O contrato `EventSearchRepository` separa a interface da origem dos dados. Se o
 volume ultrapassar este limite, a implementação Firestore pode ser substituída
 por um índice dedicado, como Algolia, Typesense ou Elasticsearch, sem alterar a
 página nem o modelo dos resultados.
+
+## Linguagem natural
+
+Frases com data, período do dia, local, categoria, gratuitidade ou preço são
+convertidas em filtros estruturados e aplicadas ao mesmo corpus. A interpretação
+é mostrada na interface e não é enviada para um serviço externo. Detalhes e a
+estratégia futura de embeddings estão em `docs/natural_search.md`.

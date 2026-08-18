@@ -33,3 +33,6 @@ favoritos e o processo de ativação estão em `docs/backend.md`.
 
 O centro pessoal em `/saved`, os interesses, o histórico agregado e a baseline
 de recomendações estão descritos em `docs/personalization.md`.
+
+A pesquisa em linguagem natural e o caminho futuro para pesquisa semântica
+estão descritos em `docs/natural_search.md`.
