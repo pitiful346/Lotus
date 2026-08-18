@@ -16,6 +16,7 @@ import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/firestore_map_event_repository.dart';
 import '../location/user_location_controller.dart';
+import 'event_filter_sheet.dart';
 import 'event_map_preview_card.dart';
 import 'lotus_home_map_platform_stub.dart'
     if (dart.library.io) 'lotus_home_map_platform_native.dart'
@@ -53,6 +54,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   bool _isLoadingEvents = false;
   bool _hasEventError = false;
   int _eventRequestVersion = 0;
+  EventFilters _filters = EventFilters();
   String? _selectedEventId;
   String? _openingEventId;
   int _centerOnUserRequest = 0;
@@ -266,6 +268,35 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     }
   }
 
+  Future<void> _openFilters() async {
+    final filters = await showModalBottomSheet<EventFilters>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.9,
+        child: EventFilterSheet(
+          initialFilters: _filters,
+          hasUserLocation: _locationController.state.coordinates != null,
+        ),
+      ),
+    );
+    if (!mounted || filters == null) {
+      return;
+    }
+    setState(() {
+      _filters = filters;
+      _selectedEventId = null;
+    });
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _filters = EventFilters();
+      _selectedEventId = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final stream = widget.eventStream;
@@ -305,7 +336,13 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     required bool hasError,
     required bool showSearchButton,
   }) {
-    final eventsById = {for (final event in events) event.id: event};
+    final visibleEvents = FilterEvents()(
+      events,
+      filters: _filters,
+      now: DateTime.now(),
+      userCoordinates: _locationController.state.coordinates,
+    );
+    final eventsById = {for (final event in visibleEvents) event.id: event};
     final selectedEvent = eventsById[_selectedEventId];
     final locationState = _locationController.state;
 
@@ -313,7 +350,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
       fit: StackFit.expand,
       children: [
         platform.buildLotusHomeMap(
-          events: events,
+          events: visibleEvents,
           onEventTap: (eventId) => _selectEvent(eventId, eventsById),
           onViewportChanged: _handleViewportChanged,
           userCoordinates: locationState.coordinates,
@@ -323,6 +360,15 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         if (hasError) const _MapErrorIndicator(),
         if (showSearchButton)
           _SearchThisAreaButton(onPressed: _searchPendingViewport),
+        _EventFiltersButton(
+          activeCount: _filters.activeCount,
+          topInset: showSearchButton ? 68 : 16,
+          onPressed: _openFilters,
+        ),
+        if (_filters.isEmpty == false &&
+            events.isNotEmpty &&
+            visibleEvents.isEmpty)
+          _NoFilteredEvents(onClear: _clearFilters),
         if (_supportsLocation)
           _CenterOnUserButton(
             status: locationState.status,
@@ -338,6 +384,77 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             onOpenDetails: () => _openEventDetails(selectedEvent),
           ),
       ],
+    );
+  }
+}
+
+class _EventFiltersButton extends StatelessWidget {
+  const _EventFiltersButton({
+    required this.activeCount,
+    required this.topInset,
+    required this.onPressed,
+  });
+
+  final int activeCount;
+  final double topInset;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      minimum: EdgeInsets.only(top: topInset, left: 16),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: FilledButton.icon(
+          key: const Key('open-event-filters'),
+          onPressed: onPressed,
+          icon: const Icon(Icons.tune_rounded, size: 18),
+          label: Text(activeCount == 0 ? 'Filtros' : 'Filtros · $activeCount'),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xF21B2029),
+            foregroundColor: activeCount == 0
+                ? Colors.white
+                : const Color(0xFFB7F34A),
+            elevation: 5,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoFilteredEvents extends StatelessWidget {
+  const _NoFilteredEvents({required this.onClear});
+
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xF21B2029),
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Nenhum evento corresponde aos filtros.',
+                style: TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 6),
+              TextButton(
+                onPressed: onClear,
+                child: const Text('Limpar filtros'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

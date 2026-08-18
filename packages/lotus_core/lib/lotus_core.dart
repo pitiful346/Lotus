@@ -6,9 +6,11 @@
 library;
 
 export 'src/application/use_cases/calculate_event_distance.dart';
+export 'src/application/use_cases/filter_events.dart';
 export 'src/application/use_cases/load_events_in_viewport.dart';
 export 'src/domain/models/event.dart';
 export 'src/domain/models/event_category.dart';
+export 'src/domain/models/event_filters.dart';
 export 'src/domain/models/event_link.dart';
 export 'src/domain/models/event_location.dart';
 export 'src/domain/models/event_organizer.dart';

@@ -36,6 +36,9 @@ restrições adequadas às aplicações Lotus.
   `Pesquisar nesta área` inicia explicitamente uma nova pesquisa;
 - apenas eventos dentro do viewport são mostrados e os resultados são
   agrupados em clusters até ao zoom `14`;
+- o painel `Filtros` permite combinar Hoje, Amanhã, Este fim de semana,
+  Música, Festas, Cultura, Desporto, Gratuitos, distância máxima e preço
+  máximo;
 - tocar num pin apresenta um preview com imagem, nome, data, distância,
   categoria e acesso à página de detalhes;
 - o botão `Centrar em mim` pede permissão apenas após interação, obtém a
@@ -65,6 +68,9 @@ O widget usa uma chave estável e não reconstrói a plataforma nativa em pausas
 da aplicação. O evento `map idle` serve apenas para guardar o viewport atual:
 arrastar ou ampliar o mapa não provoca leituras Firestore. A pesquisa tem um
 limite rígido de 250 candidatos e substitui os resultados anteriores.
+Os filtros refinam em memória os candidatos desse viewport e, por isso, não
+provocam leituras adicionais ao alternar opções. A distância só fica disponível
+quando existe uma localização válida do utilizador.
 
 Os pins vivem num único GeoJSON source do estilo Mapbox. Alterar resultados
 atualiza esse source uma vez; o clustering e a renderização ficam no SDK nativo,
