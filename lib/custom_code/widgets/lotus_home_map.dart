@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
 import '/pages/event_details/event_details_widget.dart';
+import '/pages/search/search_widget.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/firestore_map_event_repository.dart';
@@ -297,6 +298,10 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     });
   }
 
+  void _openSearch() {
+    context.pushNamed(SearchWidget.routeName);
+  }
+
   @override
   Widget build(BuildContext context) {
     final stream = widget.eventStream;
@@ -365,6 +370,10 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
           topInset: showSearchButton ? 68 : 16,
           onPressed: _openFilters,
         ),
+        _OpenSearchButton(
+          topInset: showSearchButton ? 68 : 16,
+          onPressed: _openSearch,
+        ),
         if (_filters.isEmpty == false &&
             events.isNotEmpty &&
             visibleEvents.isEmpty)
@@ -384,6 +393,32 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             onOpenDetails: () => _openEventDetails(selectedEvent),
           ),
       ],
+    );
+  }
+}
+
+class _OpenSearchButton extends StatelessWidget {
+  const _OpenSearchButton({required this.topInset, required this.onPressed});
+
+  final double topInset;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      minimum: EdgeInsets.only(top: topInset, right: 16),
+      child: Align(
+        alignment: Alignment.topRight,
+        child: FloatingActionButton.small(
+          key: const Key('open-event-search'),
+          heroTag: null,
+          tooltip: 'Pesquisar',
+          onPressed: onPressed,
+          backgroundColor: const Color(0xF21B2029),
+          foregroundColor: const Color(0xFFB7F34A),
+          child: const Icon(Icons.search_rounded),
+        ),
+      ),
     );
   }
 }
