@@ -9,6 +9,7 @@ Widget buildLotusHomeMap({
   required ValueChanged<MapViewportBounds> onViewportChanged,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
+  required GeoCoordinates initialCenter,
 }) => const _UnsupportedMapView();
 
 class _UnsupportedMapView extends StatelessWidget {

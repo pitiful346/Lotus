@@ -26,7 +26,8 @@ restrições adequadas às aplicações Lotus.
 ## Comportamento
 
 - a Home é ocupada integralmente pelo mapa;
-- a câmara começa no Porto (`41.14961, -8.61099`), com zoom `12.5`;
+- a câmara começa na cidade escolhida no onboarding, com Porto
+  (`41.14961, -8.61099`) como fallback e zoom `12.5`;
 - o estilo é Mapbox Standard com `lightPreset` definido como `night`;
 - a instância do mapa é estável durante o lifecycle e o tema é reaplicado ao
   regressar ao foreground;

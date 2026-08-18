@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import '/backend/backend.dart';
 
 import '/auth/base_auth_user_provider.dart';
+import '/custom_code/auth/lotus_app_entry.dart';
+import '/custom_code/auth/lotus_auth_screen.dart';
+import '/custom_code/onboarding/lotus_onboarding_gate.dart';
 
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -76,20 +79,19 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
       debugLogDiagnostics: true,
       refreshListenable: appStateNotifier,
       navigatorKey: appNavigatorKey,
-      errorBuilder: (context, state) => appStateNotifier.loggedIn
-          ? HomeWidget(isScrolling: null)
-          : LandingWidget(),
+      errorBuilder: (context, state) =>
+          LotusAppEntry(loggedIn: appStateNotifier.loggedIn),
       routes: [
         FFRoute(
           name: '_initialize',
           path: '/',
-          builder: (context, _) => appStateNotifier.loggedIn
-              ? HomeWidget(isScrolling: null)
-              : LandingWidget(),
+          builder: (context, _) =>
+              LotusAppEntry(loggedIn: appStateNotifier.loggedIn),
         ),
         FFRoute(
           name: HomeWidget.routeName,
           path: HomeWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => HomeWidget(
             isScrolling: params.getParam(
               'isScrolling',
@@ -100,6 +102,7 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: EventDetailsWidget.routeName,
           path: EventDetailsWidget.routePath,
+          requireAuth: true,
           asyncParams: {
             'eventoAtual': getDoc(['events'], EventsRecord.fromSnapshot),
           },
@@ -113,47 +116,57 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: NewScreen3Widget.routeName,
           path: NewScreen3Widget.routePath,
+          requireAuth: true,
           builder: (context, params) => NewScreen3Widget(),
         ),
         FFRoute(
           name: FavoritosWidget.routeName,
           path: FavoritosWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => FavoritosWidget(),
         ),
         FFRoute(
           name: SearchWidget.routeName,
           path: SearchWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => SearchWidget(),
         ),
         FFRoute(
           name: FilterWidget.routeName,
           path: FilterWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => FilterWidget(),
         ),
         FFRoute(
           name: EditProfileWidget.routeName,
           path: EditProfileWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => EditProfileWidget(),
         ),
         FFRoute(
           name: SettingsWidget.routeName,
           path: SettingsWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => SettingsWidget(),
         ),
         FFRoute(
           name: ProfileWidget.routeName,
           path: ProfileWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => ProfileWidget(),
         ),
         FFRoute(
           name: SavedWidget.routeName,
           path: SavedWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => SavedWidget(),
         ),
         FFRoute(
           name: LandingWidget.routeName,
           path: LandingWidget.routePath,
-          builder: (context, params) => LandingWidget(),
+          builder: (context, params) => appStateNotifier.loggedIn
+              ? const LotusAppEntry(loggedIn: true)
+              : const LotusAuthScreen(),
         ),
         FFRoute(
           name: LOCUSLoginWidget.routeName,
@@ -202,16 +215,19 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
         FFRoute(
           name: ExEventosWidget.routeName,
           path: ExEventosWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => ExEventosWidget(),
         ),
         FFRoute(
           name: EventsWidget.routeName,
           path: EventsWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => EventsWidget(),
         ),
         FFRoute(
           name: CategoriaDetailWidget.routeName,
           path: CategoriaDetailWidget.routePath,
+          requireAuth: true,
           builder: (context, params) => CategoriaDetailWidget(
             tituloDaCategoria: params.getParam(
               'tituloDaCategoria',
@@ -401,6 +417,12 @@ class FFRoute {
                   builder: (context, _) => builder(context, ffParams),
                 )
               : builder(context, ffParams);
+          final guardedPage = requireAuth && appStateNotifier.loggedIn
+              ? LotusOnboardingGate(
+                  userId: appStateNotifier.user?.uid ?? '',
+                  child: page,
+                )
+              : page;
           final child = appStateNotifier.loading
               ? Center(
                   child: SizedBox(
@@ -413,7 +435,7 @@ class FFRoute {
                     ),
                   ),
                 )
-              : page;
+              : guardedPage;
 
           final transitionInfo = state.transitionInfo;
           return transitionInfo.hasTransition

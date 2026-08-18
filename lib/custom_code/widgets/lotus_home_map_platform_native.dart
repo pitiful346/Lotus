@@ -24,6 +24,7 @@ Widget buildLotusHomeMap({
   required ValueChanged<MapViewportBounds> onViewportChanged,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
+  required GeoCoordinates initialCenter,
 }) {
   if (!isLotusHomeMapSupported) {
     return const _UnsupportedMapView();
@@ -39,6 +40,7 @@ Widget buildLotusHomeMap({
     onViewportChanged: onViewportChanged,
     userCoordinates: userCoordinates,
     centerOnUserRequest: centerOnUserRequest,
+    initialCenter: initialCenter,
   );
 }
 
@@ -49,6 +51,7 @@ class _NativeLotusHomeMap extends StatefulWidget {
     required this.onViewportChanged,
     required this.userCoordinates,
     required this.centerOnUserRequest,
+    required this.initialCenter,
   });
 
   final List<Event> events;
@@ -56,6 +59,7 @@ class _NativeLotusHomeMap extends StatefulWidget {
   final ValueChanged<MapViewportBounds> onViewportChanged;
   final GeoCoordinates? userCoordinates;
   final int centerOnUserRequest;
+  final GeoCoordinates initialCenter;
 
   @override
   State<_NativeLotusHomeMap> createState() => _NativeLotusHomeMapState();
@@ -63,10 +67,6 @@ class _NativeLotusHomeMap extends StatefulWidget {
 
 class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     with WidgetsBindingObserver {
-  static final Point _portoCenter = Point(
-    coordinates: Position(-8.61099, 41.14961),
-  );
-
   MapboxMap? _mapboxMap;
   bool _isForeground = true;
   bool _isStyleReady = false;
@@ -364,7 +364,12 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       key: const ValueKey('lotus-home-map'),
       styleUri: MapboxStyles.STANDARD,
       viewport: CameraViewportState(
-        center: _portoCenter,
+        center: Point(
+          coordinates: Position(
+            widget.initialCenter.longitude,
+            widget.initialCenter.latitude,
+          ),
+        ),
         zoom: 12.5,
         bearing: 0,
         pitch: 0,

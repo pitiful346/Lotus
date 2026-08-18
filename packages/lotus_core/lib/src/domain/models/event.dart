@@ -32,6 +32,7 @@ final class Event {
     Iterable<String> accessibilityTags = const [],
     this.minimumAge,
     this.isFeatured = false,
+    this.popularityScore = 0,
     String timeZoneId = 'Europe/Lisbon',
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -74,6 +75,13 @@ final class Event {
         'Must be non-negative.',
       );
     }
+    if (popularityScore < 0) {
+      throw ArgumentError.value(
+        popularityScore,
+        'popularityScore',
+        'Must be non-negative.',
+      );
+    }
     if (imageUri != null && !imageUri!.isAbsolute) {
       throw ArgumentError.value(
         imageUri,
@@ -105,6 +113,7 @@ final class Event {
   final Set<String> accessibilityTags;
   final int? minimumAge;
   final bool isFeatured;
+  final int popularityScore;
 
   final DateTime? createdAt;
   final DateTime? updatedAt;

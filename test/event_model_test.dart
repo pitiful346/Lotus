@@ -39,6 +39,7 @@ void main() {
         accessibilityTags: const ['Wheelchair'],
         minimumAge: 18,
         isFeatured: true,
+        popularityScore: 42,
       );
 
       expect(event.categoryIds, {'music'});
@@ -49,6 +50,7 @@ void main() {
       expect(event.languageCodes, {'pt', 'en'});
       expect(event.hasTickets, isTrue);
       expect(event.isFree, isFalse);
+      expect(event.popularityScore, 42);
       expect(event.startsAt.isUtc, isTrue);
       expect(
         event.occursBetween(

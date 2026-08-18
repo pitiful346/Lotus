@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lotus/custom_code/widgets/lotus_event_search.dart';
+import 'package:lotus/custom_code/widgets/lotus_search_history.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 void main() {
@@ -20,7 +21,9 @@ void main() {
     );
 
     expect(
-      find.text('Pesquisa por evento, local, artista ou categoria.'),
+      find.text(
+        'Pesquisa por evento, local, artista, organizador ou categoria.',
+      ),
       findsOneWidget,
     );
     await tester.enterText(
@@ -58,7 +61,7 @@ void main() {
 
     await tester.enterText(field, 'dj mare');
     await tester.pumpAndSettle();
-    expect(find.text('Artistas'), findsOneWidget);
+    expect(find.text('Artistas e organizadores'), findsOneWidget);
     expect(find.text('DJ Maré'), findsOneWidget);
 
     await tester.enterText(field, 'musica');
@@ -171,6 +174,58 @@ void main() {
     expect(find.text('Pesquisa indisponível'), findsOneWidget);
     expect(find.text('Tentar novamente'), findsOneWidget);
   });
+
+  testWidgets('search restores, applies, and clears recent searches', (
+    tester,
+  ) async {
+    final history = _HistoryStore(['Música no Porto']);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LotusEventSearch(
+          repository: _FakeSearchRepository(_events()),
+          historyStore: history,
+          debounceDuration: Duration.zero,
+          onOpenEvent: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pesquisas recentes'), findsOneWidget);
+    expect(find.text('Música no Porto'), findsNWidgets(2));
+    final recentQuery = find.widgetWithText(ListTile, 'Música no Porto');
+    await tester.drag(find.byType(ListView).first, const Offset(0, -120));
+    await tester.pumpAndSettle();
+    await tester.tap(recentQuery);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('event-search-field')))
+          .controller!
+          .text,
+      'Música no Porto',
+    );
+
+    await tester.tap(find.byKey(const Key('clear-event-search')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('clear-search-history')));
+    await tester.pumpAndSettle();
+    expect(history.values, isEmpty);
+  });
+}
+
+final class _HistoryStore implements LotusSearchHistoryStore {
+  _HistoryStore(this.values);
+
+  List<String> values;
+
+  @override
+  Future<List<String>> load() async => values;
+
+  @override
+  Future<void> save(List<String> queries) async {
+    values = List.of(queries);
+  }
 }
 
 final class _PendingSearchRepository implements EventSearchRepository {

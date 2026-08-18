@@ -74,6 +74,7 @@ Event? eventFromRecord(EventsRecord record, {EventOrganizer? organizer}) {
       status: EventStatus.published,
       ticketAvailability: _ticketAvailability(record.ticketStatus),
       isFeatured: record.isBoosted,
+      popularityScore: record.clickCount,
     );
   } on ArgumentError {
     return null;

@@ -42,3 +42,9 @@ estão descritos em `docs/notifications.md`.
 
 Os estados de loading/empty/error, cache e offline parcial, animações, haptics
 e critérios de acessibilidade estão descritos em `docs/product_quality.md`.
+
+O login por email, persistência de sessão, recuperação de palavra-passe e o
+onboarding estão descritos em `docs/auth_onboarding.md`.
+
+A navegação principal, a descoberta fora do mapa, favoritos, perfil e pesquisa
+recente estão descritos em `docs/main_navigation.md`.

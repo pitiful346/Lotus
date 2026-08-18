@@ -21,6 +21,8 @@ void main() {
     expect(rules, isNot(contains('allow write: if true')));
     expect(rules, contains('match /favorites/{eventId}'));
     expect(rules, contains('match /preferences/{preferenceId}'));
+    expect(rules, contains("preferenceId == 'onboarding'"));
+    expect(rules, contains('validOnboarding(request.resource.data)'));
     expect(rules, contains('match /interactions/{eventId}'));
     expect(rules, contains('match /devices/{deviceId}'));
     expect(rules, contains('match /notifications/{notificationId}'));

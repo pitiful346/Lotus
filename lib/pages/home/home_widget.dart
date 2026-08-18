@@ -1,15 +1,11 @@
-import '/custom_code/widgets/lotus_home_map.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
+import '/custom_code/widgets/lotus_main_shell.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'home_model.dart';
 export 'home_model.dart';
 
 class HomeWidget extends StatefulWidget {
-  const HomeWidget({
-    super.key,
-    required this.isScrolling,
-  });
+  const HomeWidget({super.key, required this.isScrolling});
 
   final bool? isScrolling;
 
@@ -42,10 +38,6 @@ class _HomeWidgetState extends State<HomeWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: scaffoldKey,
-      backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
-      body: const LotusHomeMap(),
-    );
+    return const LotusMainShell();
   }
 }

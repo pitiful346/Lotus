@@ -70,6 +70,17 @@ Primitivas de apresentação partilhadas, sem regras de negócio, vivem em
 transições, feedback tátil e acessibilidade reutilizáveis pelos widgets
 customizados; modelos e decisões de produto continuam no `lotus_core`.
 
+Autenticação e onboarding vivem, respetivamente, em
+`lib/custom_code/auth/` e `lib/custom_code/onboarding/`. O router gerado contém
+apenas os pontos de integração: proteção de rotas e composição dos gates.
+
+A navegação autenticada é composta por
+`lib/custom_code/widgets/lotus_main_shell.dart`. `HomeWidget`, gerado pelo
+FlutterFlow, é apenas o ponto de montagem; Mapa, Explorar, Favoritos e Perfil
+ficam em widgets nossos e podem evoluir sem editar quatro páginas geradas.
+Adapters que leem records do Firestore ficam em `custom_code/event_mapping/`,
+nunca dentro dos widgets.
+
 ## Direção das dependências
 
 ```text

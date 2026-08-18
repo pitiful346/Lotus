@@ -34,6 +34,7 @@ class LotusHomeMap extends StatefulWidget {
     this.onOpenEvent,
     this.locationController,
     this.eventRepository,
+    this.initialCenter,
   });
 
   /// Injectable for tests and future repository implementations.
@@ -42,6 +43,7 @@ class LotusHomeMap extends StatefulWidget {
   final ValueChanged<Event>? onOpenEvent;
   final UserLocationController? locationController;
   final MapEventRepository? eventRepository;
+  final GeoCoordinates? initialCenter;
 
   @override
   State<LotusHomeMap> createState() => _LotusHomeMapState();
@@ -371,6 +373,9 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             onViewportChanged: _handleViewportChanged,
             userCoordinates: locationState.coordinates,
             centerOnUserRequest: _centerOnUserRequest,
+            initialCenter:
+                widget.initialCenter ??
+                GeoCoordinates(latitude: 41.14961, longitude: -8.61099),
           ),
         ),
         if (isLoading) const _MapLoadingIndicator(),

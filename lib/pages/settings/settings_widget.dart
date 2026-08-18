@@ -2,6 +2,7 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/custom_code/widgets/lotus_notification_settings.dart';
+import '/custom_code/auth/lotus_account_actions.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -2067,7 +2068,10 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                               .spacing
                               .md)),
                     ),
-                    Container(
+                    const LotusAccountActions(),
+                    Offstage(
+                      offstage: true,
+                      child: Container(
                       child: Padding(
                         padding: EdgeInsetsDirectional.fromSTEB(
                             0.0,
@@ -2221,6 +2225,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                   .spacing
                                   .md)),
                         ),
+                      ),
                       ),
                     ),
                   ].divide(SizedBox(

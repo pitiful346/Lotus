@@ -109,6 +109,23 @@ service cloud.firestore {
         data.updated_at == request.time;
     }
 
+    function validOnboarding(data) {
+      return data.keys().hasAll([
+          'completed', 'skipped', 'city', 'location_permission_status',
+          'updated_at'
+        ]) &&
+        data.keys().hasOnly([
+          'completed', 'skipped', 'city', 'location_permission_status',
+          'updated_at'
+        ]) &&
+        data.completed is bool && data.completed == true &&
+        data.skipped is bool &&
+        data.city is string && data.city.size() > 0 && data.city.size() <= 120 &&
+        data.location_permission_status is string &&
+        data.location_permission_status.size() <= 40 &&
+        data.updated_at == request.time;
+    }
+
     function validNotificationPreferences(data) {
       return data.keys().hasAll([
           'favorite_event_updates', 'upcoming_favorite_events',
@@ -223,7 +240,9 @@ service cloud.firestore {
           ((preferenceId == 'personalization' &&
               validPreferences(request.resource.data)) ||
             (preferenceId == 'notifications' &&
-              validNotificationPreferences(request.resource.data)));
+              validNotificationPreferences(request.resource.data)) ||
+            (preferenceId == 'onboarding' &&
+              validOnboarding(request.resource.data)));
         allow delete: if owns(userId) || isAdmin();
       }
 

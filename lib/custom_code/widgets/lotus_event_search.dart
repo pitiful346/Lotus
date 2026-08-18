@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/firestore_event_search_repository.dart';
+import 'lotus_search_history.dart';
 
 const _background = Color(0xFF080B10);
 const _surface = Color(0xFF151B23);
@@ -23,6 +24,7 @@ class LotusEventSearch extends StatefulWidget {
     this.onOpenEvent,
     this.interpreter,
     this.now,
+    this.historyStore,
   });
 
   final EventSearchRepository? repository;
@@ -30,6 +32,7 @@ class LotusEventSearch extends StatefulWidget {
   final ValueChanged<Event>? onOpenEvent;
   final NaturalEventQueryInterpreter? interpreter;
   final DateTime Function()? now;
+  final LotusSearchHistoryStore? historyStore;
 
   @override
   State<LotusEventSearch> createState() => _LotusEventSearchState();
@@ -40,6 +43,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
 
   late EventSearchRepository _repository;
   late NaturalEventQueryInterpreter _interpreter;
+  late LotusSearchHistoryStore _historyStore;
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   Timer? _debounce;
@@ -49,12 +53,16 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
   bool _isLoading = false;
   bool _hasError = false;
   int _searchVersion = 0;
+  List<String> _history = const [];
 
   @override
   void initState() {
     super.initState();
     _repository = widget.repository ?? FirestoreEventSearchRepository();
     _interpreter = widget.interpreter ?? const ParseNaturalEventQuery();
+    _historyStore =
+        widget.historyStore ?? SharedPreferencesLotusSearchHistoryStore();
+    unawaited(_loadHistory());
   }
 
   @override
@@ -69,6 +77,11 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
     if (oldWidget.interpreter != widget.interpreter) {
       _interpreter = widget.interpreter ?? const ParseNaturalEventQuery();
       _interpretation = null;
+    }
+    if (oldWidget.historyStore != widget.historyStore) {
+      _historyStore =
+          widget.historyStore ?? SharedPreferencesLotusSearchHistoryStore();
+      unawaited(_loadHistory());
     }
   }
 
@@ -133,6 +146,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
             : SearchEvents()(corpus, query);
         _isLoading = false;
       });
+      unawaited(_remember(query));
     } catch (_) {
       if (!mounted || version != _searchVersion) {
         return;
@@ -144,6 +158,49 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
         _interpretation = null;
       });
     }
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final history = await _historyStore.load();
+      if (!mounted) return;
+      setState(() => _history = history.take(8).toList(growable: false));
+    } catch (_) {
+      // Search remains usable when local preferences are unavailable.
+    }
+  }
+
+  Future<void> _remember(String query) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return;
+    final updated = <String>[
+      normalized,
+      ..._history.where(
+        (item) => item.toLowerCase() != normalized.toLowerCase(),
+      ),
+    ].take(8).toList(growable: false);
+    if (mounted) setState(() => _history = updated);
+    try {
+      await _historyStore.save(updated);
+    } catch (_) {
+      // Search results must not depend on local history persistence.
+    }
+  }
+
+  Future<void> _clearHistory() async {
+    setState(() => _history = const []);
+    try {
+      await _historyStore.save(const []);
+    } catch (_) {
+      // The in-memory history is already cleared for this session.
+    }
+  }
+
+  void _applySuggestion(String query) {
+    _controller.text = query;
+    _controller.selection = TextSelection.collapsed(offset: query.length);
+    setState(() {});
+    unawaited(_search(query));
   }
 
   void _clear() {
@@ -300,7 +357,11 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
 
   Widget _body(bool hasQuery) {
     if (!hasQuery) {
-      return const _SearchIntroduction();
+      return _SearchIntroduction(
+        history: _history,
+        onSelect: _applySuggestion,
+        onClearHistory: _history.isEmpty ? null : _clearHistory,
+      );
     }
     if (_isLoading) {
       return const LotusSkeletonList(itemCount: 5, compact: true);
@@ -344,15 +405,22 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
 }
 
 class _SearchIntroduction extends StatelessWidget {
-  const _SearchIntroduction();
+  const _SearchIntroduction({
+    required this.history,
+    required this.onSelect,
+    required this.onClearHistory,
+  });
+
+  final List<String> history;
+  final ValueChanged<String> onSelect;
+  final VoidCallback? onClearHistory;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+      children: [
+        const Column(
           children: [
             Icon(Icons.travel_explore_rounded, color: _accent, size: 44),
             SizedBox(height: 16),
@@ -367,7 +435,7 @@ class _SearchIntroduction extends StatelessWidget {
             ),
             SizedBox(height: 8),
             Text(
-              'Pesquisa por evento, local, artista ou categoria.',
+              'Pesquisa por evento, local, artista, organizador ou categoria.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF9AA8B8)),
             ),
@@ -379,7 +447,55 @@ class _SearchIntroduction extends StatelessWidget {
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 26),
+        const Text(
+          'Sugestões',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final query in const [
+              'Hoje',
+              'Este fim de semana',
+              'Música no Porto',
+              'Eventos gratuitos',
+            ])
+              ActionChip(label: Text(query), onPressed: () => onSelect(query)),
+          ],
+        ),
+        if (history.isNotEmpty) ...[
+          const SizedBox(height: 26),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Pesquisas recentes',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton(
+                key: const Key('clear-search-history'),
+                onPressed: onClearHistory,
+                child: const Text('Limpar'),
+              ),
+            ],
+          ),
+          for (final query in history)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.history_rounded),
+              title: Text(query),
+              trailing: const Icon(Icons.north_west_rounded, size: 18),
+              onTap: () => onSelect(query),
+            ),
+        ],
+      ],
     );
   }
 }
@@ -478,7 +594,7 @@ class _ResultSectionTitle extends StatelessWidget {
     final label = switch (type) {
       EventSearchResultType.event => 'Eventos',
       EventSearchResultType.venue => 'Locais',
-      EventSearchResultType.artist => 'Artistas',
+      EventSearchResultType.artist => 'Artistas e organizadores',
       EventSearchResultType.category => 'Categorias',
     };
     return Padding(
