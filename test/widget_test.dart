@@ -18,7 +18,9 @@ void main() {
   testWidgets('LotusHomeMap has a safe fallback outside mobile', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: LotusHomeMap()));
+    await tester.pumpWidget(
+      MaterialApp(home: LotusHomeMap(eventStream: Stream.value(const []))),
+    );
 
     expect(find.byType(LotusHomeMap), findsOneWidget);
     expect(

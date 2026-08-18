@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:lotus_core/lotus_core.dart';
 
-Widget buildLotusHomeMap() => const _UnsupportedMapView();
+Widget buildLotusHomeMap({
+  required List<Event> events,
+  required ValueChanged<String> onEventTap,
+}) => const _UnsupportedMapView();
 
 class _UnsupportedMapView extends StatelessWidget {
   const _UnsupportedMapView();

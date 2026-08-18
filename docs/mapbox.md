@@ -30,6 +30,9 @@ restrições adequadas às aplicações Lotus.
 - o estilo é Mapbox Standard com `lightPreset` definido como `night`;
 - a instância do mapa é estável durante o lifecycle e o tema é reaplicado ao
   regressar ao foreground;
+- os eventos válidos do Firestore são convertidos para o modelo de domínio e
+  apresentados como pins personalizados;
+- tocar num pin seleciona o evento e apresenta o respetivo resumo;
 - quando o token não existe, a aplicação mostra um estado de configuração em
   vez de criar um mapa inválido;
 - web e desktop mostram um fallback, porque a versão estável do SDK Mapbox
@@ -55,3 +58,8 @@ O widget usa uma chave estável, não subscreve eventos contínuos de câmara ou
 renderização e não reconstrói a plataforma nativa em pausas da aplicação. Para
 eventos futuros em volume, preferir sources/layers do estilo a uma annotation
 Flutter por evento.
+
+As atualizações correntes calculam diferenças por `Event.id`: pins novos são
+criados em batch, pins removidos são apagados em batch e apenas coordenadas ou
+estado de destaque alterados geram updates individuais. Alterações de título ou
+descrição não causam trabalho no renderer nativo.
