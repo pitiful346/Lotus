@@ -6,6 +6,7 @@
 library;
 
 export 'src/application/use_cases/calculate_event_distance.dart';
+export 'src/application/use_cases/evaluate_notification_delivery.dart';
 export 'src/application/use_cases/filter_events.dart';
 export 'src/application/use_cases/load_events_in_viewport.dart';
 export 'src/application/use_cases/recommend_events.dart';
@@ -24,9 +25,11 @@ export 'src/domain/models/event_search_result.dart';
 export 'src/domain/models/geo_coordinates.dart';
 export 'src/domain/models/map_viewport_bounds.dart';
 export 'src/domain/models/natural_event_query.dart';
+export 'src/domain/models/notification_preferences.dart';
 export 'src/domain/models/recommended_event.dart';
 export 'src/domain/repositories/map_event_repository.dart';
 export 'src/domain/repositories/event_search_repository.dart';
 export 'src/domain/repositories/favorite_repository.dart';
 export 'src/domain/repositories/personalization_repository.dart';
+export 'src/domain/repositories/notification_preferences_repository.dart';
 export 'src/domain/services/natural_event_query_interpreter.dart';

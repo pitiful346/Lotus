@@ -58,6 +58,13 @@ A UI continua no FlutterFlow ou em `lib/custom_code/widgets/`. Se a quantidade
 de UI própria crescer significativamente, poderá ser extraída mais tarde para
 um pacote `lotus_ui`; não é necessário criar esse custo agora.
 
+Integrações móveis que atravessam o ciclo de vida da app ficam em
+`lib/custom_code/<capacidade>/`. Por exemplo, notificações mantêm o modelo e a
+política anti-spam no `lotus_core`, o adapter Firebase em
+`lib/custom_code/notifications/` e apenas o widget de ligação em
+`lib/custom_code/widgets/`. As regras de envio privilegiadas ficam nas Cloud
+Functions, nunca na UI.
+
 ## Direção das dependências
 
 ```text

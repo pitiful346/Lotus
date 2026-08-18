@@ -36,3 +36,6 @@ de recomendações estão descritos em `docs/personalization.md`.
 
 A pesquisa em linguagem natural e o caminho futuro para pesquisa semântica
 estão descritos em `docs/natural_search.md`.
+
+As notificações opt-in, lembretes, avisos de alterações e limites anti-spam
+estão descritos em `docs/notifications.md`.

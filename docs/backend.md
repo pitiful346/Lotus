@@ -28,6 +28,10 @@ users/{uid}                              conta privada do utilizador
 users/{uid}/favorites/{eventId}          favoritos privados e escaláveis
 users/{uid}/preferences/personalization  interesses privados
 users/{uid}/interactions/{eventId}        histórico agregado privado
+users/{uid}/preferences/notifications     consentimento por tipo de aviso
+users/{uid}/devices/{installationId}      tokens FCM privados
+users/{uid}/notifications/{notificationId} histórico de envios privado
+notification_queue/{notificationId}       fila exclusiva das Functions
 ```
 
 ### `events`
@@ -138,3 +142,7 @@ Antes do deploy:
 As regras do repositório não ficam ativas até serem publicadas no projeto
 Firebase. O deploy deve ser separado do deploy da aplicação e ter rollback
 preparado.
+
+As Functions agendadas de notificações exigem um projeto com faturação ativo.
+O APNs e os passos de validação móvel estão documentados em
+`docs/notifications.md`.

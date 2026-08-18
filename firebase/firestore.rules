@@ -109,6 +109,36 @@ service cloud.firestore {
         data.updated_at == request.time;
     }
 
+    function validNotificationPreferences(data) {
+      return data.keys().hasAll([
+          'favorite_event_updates', 'upcoming_favorite_events',
+          'recommendations', 'quiet_hours_start', 'quiet_hours_end',
+          'max_per_day', 'updated_at'
+        ]) &&
+        data.keys().hasOnly([
+          'favorite_event_updates', 'upcoming_favorite_events',
+          'recommendations', 'quiet_hours_start', 'quiet_hours_end',
+          'max_per_day', 'updated_at'
+        ]) &&
+        data.favorite_event_updates is bool &&
+        data.upcoming_favorite_events is bool &&
+        data.recommendations is bool &&
+        data.quiet_hours_start == 22 &&
+        data.quiet_hours_end == 8 &&
+        data.max_per_day == 3 &&
+        data.updated_at == request.time;
+    }
+
+    function validNotificationDevice(data) {
+      return data.keys().hasAll(['token', 'platform', 'enabled', 'updated_at']) &&
+        data.keys().hasOnly(['token', 'platform', 'enabled', 'updated_at']) &&
+        data.token is string && data.token.size() > 0 &&
+        data.token.size() <= 4096 &&
+        data.platform in ['android', 'iOS', 'macOS', 'windows', 'linux'] &&
+        data.enabled == true &&
+        data.updated_at == request.time;
+    }
+
     function validInteraction(data, eventId) {
       return data.keys().hasAll([
           'event_ref', 'event_id', 'category_ids', 'first_interacted_at',
@@ -189,9 +219,28 @@ service cloud.firestore {
 
       match /preferences/{preferenceId} {
         allow read: if owns(userId) || isAdmin();
-        allow create, update: if preferenceId == 'personalization' &&
-          owns(userId) && validPreferences(request.resource.data);
+        allow create, update: if owns(userId) &&
+          ((preferenceId == 'personalization' &&
+              validPreferences(request.resource.data)) ||
+            (preferenceId == 'notifications' &&
+              validNotificationPreferences(request.resource.data)));
         allow delete: if owns(userId) || isAdmin();
+      }
+
+      match /devices/{deviceId} {
+        allow read: if owns(userId) || isAdmin();
+        allow create, update: if owns(userId) &&
+          validNotificationDevice(request.resource.data);
+        allow delete: if owns(userId) || isAdmin();
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if owns(userId) || isAdmin();
+        allow write: if false;
+      }
+
+      match /notification_delivery/{dayId} {
+        allow read, write: if false;
       }
 
       match /interactions/{eventId} {
@@ -230,6 +279,11 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if owns(userId) || isAdmin();
       }
+    }
+
+    // Trusted Cloud Functions own the queue through the Admin SDK.
+    match /notification_queue/{notificationId} {
+      allow read, write: if false;
     }
 
     match /{document=**} {

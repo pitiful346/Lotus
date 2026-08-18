@@ -22,10 +22,26 @@ void main() {
     expect(rules, contains('match /favorites/{eventId}'));
     expect(rules, contains('match /preferences/{preferenceId}'));
     expect(rules, contains('match /interactions/{eventId}'));
+    expect(rules, contains('match /devices/{deviceId}'));
+    expect(rules, contains('match /notifications/{notificationId}'));
+    expect(rules, contains('match /notification_queue/{notificationId}'));
+    expect(rules, contains('data.max_per_day == 3'));
     expect(rules, contains('interactionCount(request.resource.data)'));
     expect(rules, contains('match /organizers/{organizerId}'));
     expect(rules, contains('request.auth.token.admin == true'));
     expect(rules, contains('match /{document=**}'));
+  });
+
+  test('notification functions contain the anti-spam guardrails', () {
+    final functions = File('firebase/functions/index.js').readAsStringSync();
+
+    expect(functions, contains('onFavoriteEventChanged'));
+    expect(functions, contains('queueUpcomingFavoriteEvents'));
+    expect(functions, contains('queueWeeklyRecommendations'));
+    expect(functions, contains('dispatchPendingNotifications'));
+    expect(functions, contains('MAX_DAILY_NOTIFICATIONS = 3'));
+    expect(functions, contains('QUIET_HOURS_START = 22'));
+    expect(functions, contains('crypto.createHash("sha256")'));
   });
 
   test('Storage rules limit image uploads and deny unmatched paths', () {
