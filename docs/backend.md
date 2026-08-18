@@ -26,6 +26,8 @@ events/{eventId}                         catálogo público
 organizers/{uid}                         perfil público do organizador
 users/{uid}                              conta privada do utilizador
 users/{uid}/favorites/{eventId}          favoritos privados e escaláveis
+users/{uid}/preferences/personalization  interesses privados
+users/{uid}/interactions/{eventId}        histórico agregado privado
 ```
 
 ### `events`
@@ -51,6 +53,10 @@ O array `favoritos` é mantido temporariamente porque vários widgets gerados
 ainda o usam. Código novo usa a subcoleção `favorites`; a implementação atual
 faz as duas escritas na mesma transação. Depois de migrar os últimos widgets e
 os documentos existentes, o array pode ser removido.
+
+Interesses e interações vivem em subcoleções privadas. Uma interação agrega
+contadores por evento, evitando uma escrita histórica ilimitada por cada toque.
+O detalhe completo da estratégia está em `docs/personalization.md`.
 
 ### `organizers`
 

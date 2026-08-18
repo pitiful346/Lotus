@@ -102,6 +102,44 @@ service cloud.firestore {
         data.organizer_id == organizerReference(request.auth.uid);
     }
 
+    function validPreferences(data) {
+      return data.keys().hasAll(['interest_ids', 'updated_at']) &&
+        data.keys().hasOnly(['interest_ids', 'updated_at']) &&
+        data.interest_ids is list && data.interest_ids.size() <= 30 &&
+        data.updated_at == request.time;
+    }
+
+    function validInteraction(data, eventId) {
+      return data.keys().hasAll([
+          'event_ref', 'event_id', 'category_ids', 'first_interacted_at',
+          'last_interacted_at', 'last_interaction_type', 'view_count',
+          'save_count', 'share_count', 'directions_count', 'ticket_count'
+        ]) &&
+        data.keys().hasOnly([
+          'event_ref', 'event_id', 'category_ids', 'first_interacted_at',
+          'last_interacted_at', 'last_interaction_type', 'view_count',
+          'save_count', 'share_count', 'directions_count', 'ticket_count'
+        ]) &&
+        data.event_ref == /databases/$(database)/documents/events/$(eventId) &&
+        data.event_id == eventId &&
+        data.category_ids is list && data.category_ids.size() <= 20 &&
+        data.first_interacted_at is timestamp &&
+        data.last_interacted_at == request.time &&
+        data.last_interaction_type in [
+          'viewed', 'saved', 'shared', 'directionsOpened', 'ticketOpened'
+        ] &&
+        data.view_count is int && data.view_count >= 0 &&
+        data.save_count is int && data.save_count >= 0 &&
+        data.share_count is int && data.share_count >= 0 &&
+        data.directions_count is int && data.directions_count >= 0 &&
+        data.ticket_count is int && data.ticket_count >= 0;
+    }
+
+    function interactionCount(data) {
+      return data.view_count + data.save_count + data.share_count +
+        data.directions_count + data.ticket_count;
+    }
+
     match /events/{eventId} {
       // Event documents contain public catalogue data only. Archiving controls
       // product visibility, not confidentiality, so existing unfiltered
@@ -148,6 +186,36 @@ service cloud.firestore {
               'email', 'display_name', 'photo_url', 'phone_number', 'favoritos'
             ])));
       allow delete: if owns(userId) || isAdmin();
+
+      match /preferences/{preferenceId} {
+        allow read: if owns(userId) || isAdmin();
+        allow create, update: if preferenceId == 'personalization' &&
+          owns(userId) && validPreferences(request.resource.data);
+        allow delete: if owns(userId) || isAdmin();
+      }
+
+      match /interactions/{eventId} {
+        allow read: if owns(userId) || isAdmin();
+        allow create: if owns(userId) &&
+          validInteraction(request.resource.data, eventId) &&
+          request.resource.data.first_interacted_at == request.time &&
+          interactionCount(request.resource.data) == 1;
+        allow update: if owns(userId) &&
+          validInteraction(request.resource.data, eventId) &&
+          request.resource.data.event_ref == resource.data.event_ref &&
+          request.resource.data.event_id == resource.data.event_id &&
+          request.resource.data.first_interacted_at ==
+            resource.data.first_interacted_at &&
+          request.resource.data.view_count >= resource.data.view_count &&
+          request.resource.data.save_count >= resource.data.save_count &&
+          request.resource.data.share_count >= resource.data.share_count &&
+          request.resource.data.directions_count >=
+            resource.data.directions_count &&
+          request.resource.data.ticket_count >= resource.data.ticket_count &&
+          interactionCount(request.resource.data) ==
+            interactionCount(resource.data) + 1;
+        allow delete: if owns(userId) || isAdmin();
+      }
 
       match /favorites/{eventId} {
         allow read: if owns(userId) || isAdmin();

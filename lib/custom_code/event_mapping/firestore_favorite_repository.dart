@@ -14,6 +14,35 @@ final class FirestoreFavoriteRepository implements FavoriteRepository {
   final FirebaseFirestore _firestore;
 
   @override
+  Stream<Set<String>> watchFavoriteEventIds(String userId) {
+    final user = _userReference(userId);
+    return Rx.combineLatest2(
+      user.collection('favorites').snapshots(),
+      user.snapshots(),
+      (favoriteSnapshot, userSnapshot) {
+        final eventPaths = <String>{};
+        for (final document in favoriteSnapshot.docs) {
+          final reference = document.data()['event_ref'];
+          eventPaths.add(
+            reference is DocumentReference
+                ? reference.path
+                : 'events/${document.id}',
+          );
+        }
+        final legacy = userSnapshot.data()?['favoritos'];
+        if (legacy is Iterable) {
+          eventPaths.addAll(
+            legacy.whereType<DocumentReference>().map(
+              (reference) => reference.path,
+            ),
+          );
+        }
+        return Set.unmodifiable(eventPaths);
+      },
+    ).distinct(_sameSet);
+  }
+
+  @override
   Stream<bool> watchIsFavorite({
     required String userId,
     required String eventId,
@@ -97,3 +126,6 @@ final class FirestoreFavoriteRepository implements FavoriteRepository {
     return _firestore.collection('events').doc(documentId);
   }
 }
+
+bool _sameSet(Set<String> left, Set<String> right) =>
+    left.length == right.length && left.containsAll(right);

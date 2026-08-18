@@ -30,3 +30,6 @@ See `docs/mapbox.md` for mobile requirements, CI setup, and lifecycle details.
 Firebase é o backend único do projeto: Authentication, Cloud Firestore, Cloud
 Storage e Cloud Functions. O modelo de dados, as permissões, a migração dos
 favoritos e o processo de ativação estão em `docs/backend.md`.
+
+O centro pessoal em `/saved`, os interesses, o histórico agregado e a baseline
+de recomendações estão descritos em `docs/personalization.md`.

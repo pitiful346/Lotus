@@ -3,12 +3,14 @@ import '/backend/backend.dart';
 import '/custom_code/event_mapping/events_record_to_event.dart';
 import '/custom_code/event_mapping/firestore_favorite_repository.dart';
 import '/custom_code/event_mapping/firestore_organizer_repository.dart';
+import '/custom_code/event_mapping/firestore_personalization_repository.dart';
 import '/custom_code/widgets/event_details_content.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 
 export 'event_details_model.dart';
 
@@ -18,10 +20,12 @@ class EventDetailsWidget extends StatefulWidget {
     super.key,
     required this.eventoAtual,
     this.favoriteRepository,
+    this.personalizationRepository,
   });
 
   final EventsRecord? eventoAtual;
   final FavoriteRepository? favoriteRepository;
+  final PersonalizationRepository? personalizationRepository;
 
   static String routeName = 'EventDetails';
   static String routePath = '/eventDetails';
@@ -32,13 +36,18 @@ class EventDetailsWidget extends StatefulWidget {
 
 class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   bool _isUpdatingFavorite = false;
+  bool _viewRecorded = false;
   late final FavoriteRepository _favoriteRepository;
+  late final PersonalizationRepository _personalizationRepository;
 
   @override
   void initState() {
     super.initState();
     _favoriteRepository =
         widget.favoriteRepository ?? FirestoreFavoriteRepository();
+    _personalizationRepository =
+        widget.personalizationRepository ??
+        FirestorePersonalizationRepository();
   }
 
   @override
@@ -82,6 +91,9 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
     return AuthUserStreamWidget(
       builder: (context) {
         final userId = currentUserUid;
+        if (userId.isNotEmpty) {
+          _recordViewOnce(userId, event);
+        }
         final favoriteStream = userId.isEmpty
             ? Stream<bool>.value(false)
             : _favoriteRepository.watchIsFavorite(
@@ -101,10 +113,8 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
               isUpdatingFavorite: _isUpdatingFavorite,
               onBack: context.safePop,
               onShare: () => _shareEvent(event),
-              onToggleFavorite: () => _toggleFavorite(
-                eventId: record.reference.path,
-                isFavorite: isFavorite,
-              ),
+              onToggleFavorite: () =>
+                  _toggleFavorite(event: event, isFavorite: isFavorite),
               onOpenDirections: event.location.coordinates == null
                   ? null
                   : () => _openDirections(event),
@@ -119,7 +129,7 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   }
 
   Future<void> _toggleFavorite({
-    required String eventId,
+    required Event event,
     required bool isFavorite,
   }) async {
     if (_isUpdatingFavorite) {
@@ -135,9 +145,12 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
     try {
       await _favoriteRepository.setFavorite(
         userId: userId,
-        eventId: eventId,
+        eventId: event.id,
         isFavorite: !isFavorite,
       );
+      if (!isFavorite) {
+        await _recordInteraction(userId, event, EventInteractionType.saved);
+      }
     } catch (_) {
       _showMessage('Não foi possível atualizar os favoritos.');
     } finally {
@@ -172,6 +185,7 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
         subject: event.title,
         sharePositionOrigin: origin,
       );
+      await _recordForCurrentUser(event, EventInteractionType.shared);
     } catch (_) {
       _showMessage('Não foi possível partilhar este evento.');
     }
@@ -186,7 +200,13 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
       'api': '1',
       'query': '${coordinates.latitude},${coordinates.longitude}',
     });
-    await _launchExternal(uri, 'Não foi possível abrir as direções.');
+    final opened = await _launchExternal(
+      uri,
+      'Não foi possível abrir as direções.',
+    );
+    if (opened) {
+      await _recordForCurrentUser(event, EventInteractionType.directionsOpened);
+    }
   }
 
   Future<void> _openTickets(Event event) async {
@@ -194,17 +214,60 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
     if (uri == null) {
       return;
     }
-    await _launchExternal(uri, 'Não foi possível abrir a bilheteira.');
+    final opened = await _launchExternal(
+      uri,
+      'Não foi possível abrir a bilheteira.',
+    );
+    if (opened) {
+      await _recordForCurrentUser(event, EventInteractionType.ticketOpened);
+    }
   }
 
-  Future<void> _launchExternal(Uri uri, String failureMessage) async {
+  Future<bool> _launchExternal(Uri uri, String failureMessage) async {
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) {
         _showMessage(failureMessage);
       }
+      return opened;
     } catch (_) {
       _showMessage(failureMessage);
+      return false;
+    }
+  }
+
+  void _recordViewOnce(String userId, Event event) {
+    if (_viewRecorded) {
+      return;
+    }
+    _viewRecorded = true;
+    unawaited(_recordInteraction(userId, event, EventInteractionType.viewed));
+  }
+
+  Future<void> _recordForCurrentUser(
+    Event event,
+    EventInteractionType type,
+  ) async {
+    final userId = currentUserUid;
+    if (userId.isNotEmpty) {
+      await _recordInteraction(userId, event, type);
+    }
+  }
+
+  Future<void> _recordInteraction(
+    String userId,
+    Event event,
+    EventInteractionType type,
+  ) async {
+    try {
+      await _personalizationRepository.recordInteraction(
+        userId: userId,
+        eventId: event.id,
+        categoryIds: event.categoryIds,
+        type: type,
+      );
+    } catch (_) {
+      // Personalization is best effort and must never block the event action.
     }
   }
 
