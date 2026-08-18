@@ -11,20 +11,28 @@ import 'package:flutter/material.dart';
 // Begin custom widget code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import '/pages/event_details/event_details_widget.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/events_record_to_event.dart';
+import 'event_map_preview_card.dart';
 import 'lotus_home_map_platform_stub.dart'
-    if (dart.library.io) 'lotus_home_map_platform_native.dart'
-    as platform;
+    if (dart.library.io) 'lotus_home_map_platform_native.dart' as platform;
 
 /// Full-screen event map used as the foundation of the Lotus Home page.
 class LotusHomeMap extends StatefulWidget {
-  const LotusHomeMap({super.key, this.eventStream, this.onEventTap});
+  const LotusHomeMap({
+    super.key,
+    this.eventStream,
+    this.onEventTap,
+    this.onOpenEvent,
+  });
 
   /// Injectable for tests and future repository implementations.
   final Stream<List<Event>>? eventStream;
   final ValueChanged<Event>? onEventTap;
+  final ValueChanged<Event>? onOpenEvent;
 
   @override
   State<LotusHomeMap> createState() => _LotusHomeMapState();
@@ -33,11 +41,14 @@ class LotusHomeMap extends StatefulWidget {
 class _LotusHomeMapState extends State<LotusHomeMap> {
   late Stream<List<Event>> _eventStream;
   String? _selectedEventId;
+  String? _openingEventId;
+  GeoCoordinates? _userCoordinates;
 
   @override
   void initState() {
     super.initState();
     _eventStream = widget.eventStream ?? watchMapEvents();
+    _loadUserCoordinates();
   }
 
   @override
@@ -49,6 +60,43 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     }
   }
 
+  Future<void> _loadUserCoordinates() async {
+    final cached = cachedUserLocation;
+    if (cached != null) {
+      _setUserCoordinates(cached.latitude, cached.longitude);
+      return;
+    }
+
+    try {
+      final permission = await Geolocator.checkPermission();
+      final canReadLocation = permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse;
+      if (!canReadLocation || !await Geolocator.isLocationServiceEnabled()) {
+        return;
+      }
+
+      final position = await Geolocator.getLastKnownPosition() ??
+          await Geolocator.getCurrentPosition().timeout(
+            const Duration(seconds: 5),
+          );
+      _setUserCoordinates(position.latitude, position.longitude);
+    } catch (_) {
+      // Distance is optional; the preview remains useful without permission.
+    }
+  }
+
+  void _setUserCoordinates(double latitude, double longitude) {
+    if (!mounted || (latitude == 0 && longitude == 0)) {
+      return;
+    }
+    setState(() {
+      _userCoordinates = GeoCoordinates(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    });
+  }
+
   void _selectEvent(String eventId, Map<String, Event> eventsById) {
     final event = eventsById[eventId];
     if (event == null) {
@@ -56,6 +104,59 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     }
     setState(() => _selectedEventId = eventId);
     widget.onEventTap?.call(event);
+  }
+
+  double? _distanceTo(Event event) {
+    final user = _userCoordinates;
+    final eventCoordinates = event.location.coordinates;
+    if (user == null || eventCoordinates == null) {
+      return null;
+    }
+    return Geolocator.distanceBetween(
+      user.latitude,
+      user.longitude,
+      eventCoordinates.latitude,
+      eventCoordinates.longitude,
+    );
+  }
+
+  Future<void> _openEventDetails(Event event) async {
+    if (_openingEventId != null) {
+      return;
+    }
+    final callback = widget.onOpenEvent;
+    if (callback != null) {
+      callback(event);
+      return;
+    }
+
+    setState(() => _openingEventId = event.id);
+    try {
+      final reference = FirebaseFirestore.instance.doc(event.id);
+      final record = await EventsRecord.getDocumentOnce(reference);
+      if (!mounted) {
+        return;
+      }
+      context.pushNamed(
+        EventDetailsWidget.routeName,
+        queryParameters: {
+          'eventoAtual': serializeParam(record, ParamType.Document),
+        }.withoutNulls,
+        extra: <String, dynamic>{'eventoAtual': record},
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível abrir os detalhes do evento.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _openingEventId = null);
+      }
+    }
   }
 
   @override
@@ -79,9 +180,12 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
               const _MapLoadingIndicator(),
             if (snapshot.hasError) const _MapErrorIndicator(),
             if (selectedEvent != null)
-              _EventSelectionCard(
+              EventMapPreviewCard(
                 event: selectedEvent,
+                distanceMeters: _distanceTo(selectedEvent),
+                isOpening: _openingEventId == selectedEvent.id,
                 onClose: () => setState(() => _selectedEventId = null),
+                onOpenDetails: () => _openEventDetails(selectedEvent),
               ),
           ],
         );
@@ -132,74 +236,6 @@ class _MapErrorIndicator extends StatelessWidget {
                 'Não foi possível atualizar os eventos.',
                 style: TextStyle(color: Colors.white),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EventSelectionCard extends StatelessWidget {
-  const _EventSelectionCard({required this.event, required this.onClose});
-
-  final Event event;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final localStart = event.startsAt.toLocal();
-    final localizations = MaterialLocalizations.of(context);
-    final date = localizations.formatMediumDate(localStart);
-    final time = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(localStart),
-    );
-
-    return SafeArea(
-      minimum: const EdgeInsets.all(16),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Material(
-          color: const Color(0xF21B2029),
-          borderRadius: BorderRadius.circular(18),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 8, 14),
-            child: Row(
-              children: [
-                const Icon(Icons.location_on, color: Color(0xFFB7F34A)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        event.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${event.location.displayName} · $date, $time',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFFB6C2D1)),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Fechar',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close, color: Colors.white70),
-                ),
-              ],
             ),
           ),
         ),

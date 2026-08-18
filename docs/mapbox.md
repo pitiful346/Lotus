@@ -32,7 +32,8 @@ restrições adequadas às aplicações Lotus.
   regressar ao foreground;
 - os eventos válidos do Firestore são convertidos para o modelo de domínio e
   apresentados como pins personalizados;
-- tocar num pin seleciona o evento e apresenta o respetivo resumo;
+- tocar num pin apresenta um preview com imagem, nome, data, distância,
+  categoria e acesso à página de detalhes;
 - quando o token não existe, a aplicação mostra um estado de configuração em
   vez de criar um mapa inválido;
 - web e desktop mostram um fallback, porque a versão estável do SDK Mapbox
@@ -63,3 +64,8 @@ As atualizações correntes calculam diferenças por `Event.id`: pins novos são
 criados em batch, pins removidos são apagados em batch e apenas coordenadas ou
 estado de destaque alterados geram updates individuais. Alterações de título ou
 descrição não causam trabalho no renderer nativo.
+
+A distância usa a posição em cache ou uma posição conhecida quando a permissão
+já foi concedida. Abrir o mapa não força um novo pedido de permissão; sem
+localização, o preview indica que a distância está indisponível. O documento
+Firestore só é resolvido quando o utilizador escolhe `Ver detalhes`.
