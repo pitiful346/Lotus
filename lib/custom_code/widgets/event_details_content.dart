@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lotus_core/lotus_core.dart';
+import '/custom_code/product_quality/lotus_product_quality.dart';
 
 const _background = Color(0xFF0A0E13);
 const _surface = Color(0xFF151B23);
@@ -93,13 +94,16 @@ class EventDetailsContent extends StatelessWidget {
                             .toList(growable: false),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        event.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          height: 1.15,
-                          fontWeight: FontWeight.w800,
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          event.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 30,
+                            height: 1.15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -155,11 +159,17 @@ class _EventHero extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         if (imageUri != null)
-          CachedNetworkImage(
-            imageUrl: imageUri.toString(),
-            fit: BoxFit.cover,
-            placeholder: (context, url) => const _HeroFallback(),
-            errorWidget: (context, url, error) => const _HeroFallback(),
+          Semantics(
+            image: true,
+            label: 'Imagem do evento ${event.title}',
+            child: CachedNetworkImage(
+              imageUrl: imageUri.toString(),
+              fit: BoxFit.cover,
+              memCacheWidth: 1440,
+              fadeInDuration: const Duration(milliseconds: 180),
+              placeholder: (context, url) => const _HeroFallback(),
+              errorWidget: (context, url, error) => const _HeroFallback(),
+            ),
           )
         else
           const _HeroFallback(),
@@ -224,16 +234,19 @@ class _RoundAction extends StatelessWidget {
           backgroundColor: const Color(0xB3181F28),
           disabledBackgroundColor: const Color(0x8A181F28),
         ),
-        icon: showProgress
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: _accent,
-                ),
-              )
-            : Icon(icon, color: color),
+        icon: LotusAnimatedSwap(
+          child: showProgress
+              ? const SizedBox(
+                  key: ValueKey('action-progress'),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _accent,
+                  ),
+                )
+              : Icon(icon, key: ValueKey(icon), color: color),
+        ),
       ),
     );
   }

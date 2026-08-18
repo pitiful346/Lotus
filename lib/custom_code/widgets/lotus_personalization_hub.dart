@@ -4,12 +4,14 @@ import '/custom_code/event_mapping/events_record_to_event.dart';
 import '/custom_code/event_mapping/firestore_event_search_repository.dart';
 import '/custom_code/event_mapping/firestore_favorite_repository.dart';
 import '/custom_code/event_mapping/firestore_personalization_repository.dart';
+import '/custom_code/product_quality/lotus_product_quality.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/pages/event_details/event_details_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 import 'package:rxdart/rxdart.dart';
+import 'dart:async';
 
 const _background = Color(0xFF0A0E13);
 const _surface = Color(0xFF151B23);
@@ -85,9 +87,7 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
                 }
                 final corpus = corpusSnapshot.data;
                 if (corpus == null) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: _accent),
-                  );
+                  return const LotusSkeletonList();
                 }
                 return StreamBuilder<_PersonalizationState>(
                   stream: _profileFor(userId),
@@ -97,9 +97,7 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
                     }
                     final profile = profileSnapshot.data;
                     if (profile == null) {
-                      return const Center(
-                        child: CircularProgressIndicator(color: _accent),
-                      );
+                      return const LotusSkeletonList();
                     }
                     return _HubContent(
                       corpus: corpus,
@@ -146,6 +144,7 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
     _PersonalizationState profile,
     List<Event> corpus,
   ) async {
+    unawaited(LotusProductFeedback.selection());
     final categories = <String, String>{
       'música': 'Música',
       'festas': 'Festas',
@@ -234,7 +233,9 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
         userId: currentUserUid,
         categoryIds: result,
       );
+      unawaited(LotusProductFeedback.success());
     } catch (_) {
+      unawaited(LotusProductFeedback.error());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Não foi possível guardar interesses.')),
@@ -244,6 +245,7 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
   }
 
   Future<void> _openEvent(Event event) async {
+    unawaited(LotusProductFeedback.selection());
     try {
       final reference = FirebaseFirestore.instance.doc(event.id);
       final record = await EventsRecord.getDocumentOnce(reference);
@@ -387,6 +389,25 @@ class _SavedEvents extends StatelessWidget {
             FirebaseFirestore.instance.doc(path),
           ),
           builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 112,
+                child: LotusSkeletonList(itemCount: 1, compact: true),
+              );
+            }
+            if (snapshot.hasError) {
+              return const ListTile(
+                leading: Icon(Icons.cloud_off_outlined, color: _muted),
+                title: Text(
+                  'Evento temporariamente indisponível',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  'Será atualizado quando recuperares a ligação.',
+                  style: TextStyle(color: _muted),
+                ),
+              );
+            }
             final record = snapshot.data;
             final event = record == null ? null : eventFromRecord(record);
             return event == null
@@ -519,80 +540,88 @@ class _EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: _surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: _border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 112,
-              height: 112,
-              child: event.imageUri == null
-                  ? const ColoredBox(
-                      color: Color(0xFF202A36),
-                      child: Icon(Icons.event_rounded, color: _muted),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: event.imageUri.toString(),
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const ColoredBox(
-                        color: Color(0xFF202A36),
-                        child: Icon(Icons.event_rounded, color: _muted),
-                      ),
-                    ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (reason != null) ...[
-                      Text(
-                        reason!,
-                        style: const TextStyle(
-                          color: _accent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+    return Semantics(
+      button: true,
+      label:
+          '${event.title}, ${DateFormat('EEE, d MMM, HH:mm').format(event.startsAt.toLocal())}, ${event.location.displayName}',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          color: _surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: _border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 112,
+                  height: 112,
+                  child: event.imageUri == null
+                      ? const ColoredBox(
+                          color: Color(0xFF202A36),
+                          child: Icon(Icons.event_rounded, color: _muted),
+                        )
+                      : CachedNetworkImage(
+                          imageUrl: event.imageUri.toString(),
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => const ColoredBox(
+                            color: Color(0xFF202A36),
+                            child: Icon(Icons.event_rounded, color: _muted),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                    ],
-                    Text(
-                      event.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      DateFormat(
-                        'EEE, d MMM · HH:mm',
-                      ).format(event.startsAt.toLocal()),
-                      style: const TextStyle(color: _muted, fontSize: 13),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      event.location.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: _muted, fontSize: 13),
-                    ),
-                  ],
                 ),
-              ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (reason != null) ...[
+                          Text(
+                            reason!,
+                            style: const TextStyle(
+                              color: _accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                        ],
+                        Text(
+                          event.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          DateFormat(
+                            'EEE, d MMM · HH:mm',
+                          ).format(event.startsAt.toLocal()),
+                          style: const TextStyle(color: _muted, fontSize: 13),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          event.location.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: _muted, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -606,22 +635,11 @@ class _EmptyState extends StatelessWidget {
   final String message;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: _muted, size: 46),
-          const SizedBox(height: 14),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: _muted, fontSize: 16),
-          ),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => LotusStateView(
+    kind: LotusStateKind.empty,
+    icon: icon,
+    title: 'Ainda não há conteúdo',
+    message: message,
   );
 }
 
@@ -641,11 +659,12 @@ class _ErrorState extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: FilledButton.tonal(
-      onPressed: onRetry,
-      child: const Text('Tentar novamente'),
-    ),
+  Widget build(BuildContext context) => LotusStateView(
+    kind: LotusStateKind.offline,
+    title: 'Não foi possível atualizar',
+    message: 'Verifica a ligação e tenta novamente.',
+    actionLabel: 'Tentar novamente',
+    onAction: onRetry,
   );
 }
 

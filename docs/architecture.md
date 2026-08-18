@@ -65,6 +65,11 @@ política anti-spam no `lotus_core`, o adapter Firebase em
 `lib/custom_code/widgets/`. As regras de envio privilegiadas ficam nas Cloud
 Functions, nunca na UI.
 
+Primitivas de apresentação partilhadas, sem regras de negócio, vivem em
+`lib/custom_code/product_quality/`. Esta pasta contém apenas estados visuais,
+transições, feedback tátil e acessibilidade reutilizáveis pelos widgets
+customizados; modelos e decisões de produto continuam no `lotus_core`.
+
 ## Direção das dependências
 
 ```text

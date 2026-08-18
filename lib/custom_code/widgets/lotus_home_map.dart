@@ -13,6 +13,8 @@ import 'package:flutter/material.dart';
 
 import '/pages/event_details/event_details_widget.dart';
 import '/pages/search/search_widget.dart';
+import '/custom_code/product_quality/lotus_product_quality.dart';
+import 'dart:async';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/firestore_map_event_repository.dart';
@@ -131,6 +133,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     if (event == null) {
       return;
     }
+    unawaited(LotusProductFeedback.selection());
     setState(() => _selectedEventId = eventId);
     widget.onEventTap?.call(event);
   }
@@ -180,6 +183,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         _isLoadingEvents = false;
         _hasEventError = true;
       });
+      unawaited(LotusProductFeedback.error());
     }
   }
 
@@ -189,6 +193,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   }
 
   Future<void> _centerOnUser() async {
+    unawaited(LotusProductFeedback.selection());
     final status = await _locationController.refresh(requestPermission: true);
     if (!mounted) {
       return;
@@ -270,6 +275,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   }
 
   Future<void> _openFilters() async {
+    unawaited(LotusProductFeedback.selection());
     final filters = await showModalBottomSheet<EventFilters>(
       context: context,
       isScrollControlled: true,
@@ -292,6 +298,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   }
 
   void _clearFilters() {
+    unawaited(LotusProductFeedback.selection());
     setState(() {
       _filters = EventFilters();
       _selectedEventId = null;
@@ -299,6 +306,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   }
 
   void _openSearch() {
+    unawaited(LotusProductFeedback.selection());
     context.pushNamed(SearchWidget.routeName);
   }
 
@@ -354,15 +362,23 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        platform.buildLotusHomeMap(
-          events: visibleEvents,
-          onEventTap: (eventId) => _selectEvent(eventId, eventsById),
-          onViewportChanged: _handleViewportChanged,
-          userCoordinates: locationState.coordinates,
-          centerOnUserRequest: _centerOnUserRequest,
+        Semantics(
+          container: true,
+          label: 'Mapa com ${visibleEvents.length} eventos visíveis',
+          child: platform.buildLotusHomeMap(
+            events: visibleEvents,
+            onEventTap: (eventId) => _selectEvent(eventId, eventsById),
+            onViewportChanged: _handleViewportChanged,
+            userCoordinates: locationState.coordinates,
+            centerOnUserRequest: _centerOnUserRequest,
+          ),
         ),
         if (isLoading) const _MapLoadingIndicator(),
-        if (hasError) const _MapErrorIndicator(),
+        if (hasError)
+          _MapErrorIndicator(
+            hasCachedEvents: events.isNotEmpty,
+            onRetry: _searchPendingViewport,
+          ),
         if (showSearchButton)
           _SearchThisAreaButton(onPressed: _searchPendingViewport),
         _EventFiltersButton(
@@ -378,20 +394,29 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             events.isNotEmpty &&
             visibleEvents.isEmpty)
           _NoFilteredEvents(onClear: _clearFilters),
+        if (!isLoading &&
+            !hasError &&
+            events.isEmpty &&
+            (_pendingViewport != null || widget.eventStream != null))
+          _NoEventsInArea(onRetry: _searchPendingViewport),
         if (_supportsLocation)
           _CenterOnUserButton(
             status: locationState.status,
             bottomInset: selectedEvent == null ? 24 : 218,
             onPressed: _centerOnUser,
           ),
-        if (selectedEvent != null)
-          EventMapPreviewCard(
-            event: selectedEvent,
-            distanceMeters: _distanceTo(selectedEvent),
-            isOpening: _openingEventId == selectedEvent.id,
-            onClose: () => setState(() => _selectedEventId = null),
-            onOpenDetails: () => _openEventDetails(selectedEvent),
-          ),
+        LotusAnimatedSwap(
+          child: selectedEvent == null
+              ? const SizedBox.shrink(key: ValueKey('no-event-preview'))
+              : EventMapPreviewCard(
+                  key: ValueKey(selectedEvent.id),
+                  event: selectedEvent,
+                  distanceMeters: _distanceTo(selectedEvent),
+                  isOpening: _openingEventId == selectedEvent.id,
+                  onClose: () => setState(() => _selectedEventId = null),
+                  onOpenDetails: () => _openEventDetails(selectedEvent),
+                ),
+        ),
       ],
     );
   }
@@ -576,15 +601,21 @@ class _MapLoadingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SafeArea(
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: LinearProgressIndicator(
-            minHeight: 2,
-            color: Color(0xFFB7F34A),
-            backgroundColor: Color(0x33000000),
+    return Semantics(
+      liveRegion: true,
+      label: 'A atualizar eventos no mapa',
+      child: const ExcludeSemantics(
+        child: SafeArea(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: Color(0xFFB7F34A),
+                backgroundColor: Color(0x33000000),
+              ),
+            ),
           ),
         ),
       ),
@@ -593,26 +624,83 @@ class _MapLoadingIndicator extends StatelessWidget {
 }
 
 class _MapErrorIndicator extends StatelessWidget {
-  const _MapErrorIndicator();
+  const _MapErrorIndicator({
+    required this.hasCachedEvents,
+    required this.onRetry,
+  });
+
+  final bool hasCachedEvents;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return const SafeArea(
+    return SafeArea(
       child: Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: DecoratedBox(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Color(0xE61B2029),
               borderRadius: BorderRadius.all(Radius.circular(12)),
             ),
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Text(
-                'Não foi possível atualizar os eventos.',
-                style: TextStyle(color: Colors.white),
+              padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+              child: Semantics(
+                liveRegion: true,
+                label: hasCachedEvents
+                    ? 'Sem ligação. A mostrar os últimos eventos guardados.'
+                    : 'Não foi possível carregar os eventos.',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        hasCachedEvents
+                            ? 'Offline · a mostrar dados guardados'
+                            : 'Não foi possível carregar os eventos',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: onRetry,
+                      child: const Text('Repetir'),
+                    ),
+                  ],
+                ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoEventsInArea extends StatelessWidget {
+  const _NoEventsInArea({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(24, 24, 24, 88),
+        child: Material(
+          color: const Color(0xF21B2029),
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: 320,
+            child: LotusStateView(
+              compact: true,
+              kind: LotusStateKind.empty,
+              icon: Icons.location_off_outlined,
+              title: 'Sem eventos nesta área',
+              message: 'Move o mapa ou volta a pesquisar mais tarde.',
+              actionLabel: 'Pesquisar novamente',
+              onAction: onRetry,
             ),
           ),
         ),

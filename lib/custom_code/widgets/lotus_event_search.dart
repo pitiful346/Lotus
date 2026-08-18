@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import '/backend/backend.dart';
+import '/custom_code/product_quality/lotus_product_quality.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/pages/event_details/event_details_widget.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../event_mapping/firestore_event_search_repository.dart';
@@ -145,6 +147,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
   }
 
   void _clear() {
+    unawaited(LotusProductFeedback.selection());
     _searchVersion += 1;
     _controller.clear();
     _queryChanged('');
@@ -152,6 +155,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
   }
 
   Future<void> _openEvent(Event event) async {
+    unawaited(LotusProductFeedback.selection());
     final callback = widget.onOpenEvent;
     if (callback != null) {
       callback(event);
@@ -182,6 +186,7 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
   }
 
   Future<void> _openFacet(EventSearchResult result) {
+    unawaited(LotusProductFeedback.selection());
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: _surface,
@@ -274,13 +279,19 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
             ),
             if (_interpretation case final interpretation?)
               _StructuredQueryChips(query: interpretation),
-            if (_isLoading)
-              const LinearProgressIndicator(
-                minHeight: 2,
-                color: _accent,
-                backgroundColor: Colors.transparent,
+            Expanded(
+              child: LotusAnimatedSwap(
+                child: KeyedSubtree(
+                  key: ValueKey((
+                    _isLoading,
+                    _hasError,
+                    hasQuery,
+                    _results.length,
+                  )),
+                  child: _body(hasQuery),
+                ),
               ),
-            Expanded(child: _body(hasQuery)),
+            ),
           ],
         ),
       ),
@@ -291,18 +302,25 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
     if (!hasQuery) {
       return const _SearchIntroduction();
     }
+    if (_isLoading) {
+      return const LotusSkeletonList(itemCount: 5, compact: true);
+    }
     if (_hasError) {
-      return _SearchMessage(
-        icon: Icons.cloud_off_outlined,
-        message: 'Não foi possível carregar a pesquisa.',
+      return LotusStateView(
+        kind: LotusStateKind.offline,
+        title: 'Pesquisa indisponível',
+        message:
+            'Verifica a ligação. Os conteúdos já guardados continuam disponíveis noutras áreas.',
         actionLabel: 'Tentar novamente',
         onAction: () => _search(_controller.text.trim()),
       );
     }
-    if (!_isLoading && _results.isEmpty) {
-      return const _SearchMessage(
+    if (_results.isEmpty) {
+      return const LotusStateView(
+        kind: LotusStateKind.empty,
         icon: Icons.search_off_rounded,
-        message: 'Sem resultados para esta pesquisa.',
+        title: 'Sem resultados',
+        message: 'Experimenta outro nome, local, artista ou categoria.',
       );
     }
     return ListView(
@@ -487,49 +505,62 @@ class _EventRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUri = event.imageUri;
-    return Card(
-      color: _surface,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        onTap: onTap,
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: SizedBox(
-            width: 52,
-            height: 52,
-            child: imageUri == null
-                ? const ColoredBox(
-                    color: Color(0xFF25303C),
-                    child: Icon(Icons.event_rounded, color: _accent),
-                  )
-                : Image.network(
-                    imageUri.toString(),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const ColoredBox(
-                      color: Color(0xFF25303C),
-                      child: Icon(Icons.event_rounded, color: _accent),
-                    ),
-                  ),
+    return Semantics(
+      button: true,
+      label:
+          '${event.title}, ${event.location.displayName}, ${_shortDate(event.startsAt)}',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: Card(
+          color: _surface,
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            onTap: onTap,
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 52,
+                height: 52,
+                child: imageUri == null
+                    ? const ColoredBox(
+                        color: Color(0xFF25303C),
+                        child: Icon(Icons.event_rounded, color: _accent),
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: imageUri.toString(),
+                        fit: BoxFit.cover,
+                        memCacheWidth: 156,
+                        memCacheHeight: 156,
+                        fadeInDuration: const Duration(milliseconds: 150),
+                        placeholder: (_, __) =>
+                            const ColoredBox(color: Color(0xFF25303C)),
+                        errorWidget: (_, _, _) => const ColoredBox(
+                          color: Color(0xFF25303C),
+                          child: Icon(Icons.event_rounded, color: _accent),
+                        ),
+                      ),
+              ),
+            ),
+            title: Text(
+              event.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              '${event.location.displayName} · ${_shortDate(event.startsAt)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF9AA8B8)),
+            ),
+            trailing: const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white54,
+            ),
           ),
-        ),
-        title: Text(
-          event.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Text(
-          '${event.location.displayName} · ${_shortDate(event.startsAt)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Color(0xFF9AA8B8)),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right_rounded,
-          color: Colors.white54,
         ),
       ),
     );
@@ -551,69 +582,37 @@ class _FacetRow extends StatelessWidget {
       EventSearchResultType.event => Icons.event_outlined,
     };
     final count = result.events.length;
-    return Card(
-      color: _surface,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: const Color(0xFF25303C),
-          foregroundColor: _accent,
-          child: Icon(icon),
-        ),
-        title: Text(
-          result.title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Text(
-          count == 1 ? '1 evento' : '$count eventos',
-          style: const TextStyle(color: Color(0xFF9AA8B8)),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right_rounded,
-          color: Colors.white54,
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchMessage extends StatelessWidget {
-  const _SearchMessage({
-    required this.icon,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final IconData icon;
-  final String message;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: const Color(0xFF7F8D9E), size: 40),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFAFBCCB)),
+    return Semantics(
+      button: true,
+      label: '${result.title}, ${count == 1 ? '1 evento' : '$count eventos'}',
+      onTap: onTap,
+      child: Card(
+        color: _surface,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ExcludeSemantics(
+          child: ListTile(
+            onTap: onTap,
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xFF25303C),
+              foregroundColor: _accent,
+              child: Icon(icon),
             ),
-            if (actionLabel != null) ...[
-              const SizedBox(height: 8),
-              TextButton(onPressed: onAction, child: Text(actionLabel!)),
-            ],
-          ],
+            title: Text(
+              result.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              count == 1 ? '1 evento' : '$count eventos',
+              style: const TextStyle(color: Color(0xFF9AA8B8)),
+            ),
+            trailing: const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white54,
+            ),
+          ),
         ),
       ),
     );

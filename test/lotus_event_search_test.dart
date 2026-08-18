@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lotus/custom_code/widgets/lotus_event_search.dart';
@@ -106,6 +108,86 @@ void main() {
     expect(find.text('Techno Garden'), findsOneWidget);
     expect(find.text('Techno Lisboa'), findsNothing);
   });
+
+  testWidgets('search shows an accessible skeleton while loading', (
+    tester,
+  ) async {
+    final completer = Completer<List<Event>>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LotusEventSearch(
+          repository: _PendingSearchRepository(completer.future),
+          debounceDuration: Duration.zero,
+          onOpenEvent: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('event-search-field')),
+      'porto',
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('lotus-skeleton-list')), findsOneWidget);
+
+    completer.complete(_events());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('lotus-skeleton-list')), findsNothing);
+  });
+
+  testWidgets('search distinguishes empty results from connection errors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LotusEventSearch(
+          repository: _FakeSearchRepository(const []),
+          debounceDuration: Duration.zero,
+          onOpenEvent: (_) {},
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('event-search-field')),
+      'inexistente',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Sem resultados'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LotusEventSearch(
+          repository: const _FailingSearchRepository(),
+          debounceDuration: Duration.zero,
+          onOpenEvent: (_) {},
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('event-search-field')),
+      'porto',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pesquisa indisponível'), findsOneWidget);
+    expect(find.text('Tentar novamente'), findsOneWidget);
+  });
+}
+
+final class _PendingSearchRepository implements EventSearchRepository {
+  const _PendingSearchRepository(this.result);
+
+  final Future<List<Event>> result;
+
+  @override
+  Future<List<Event>> loadCorpus({required int limit}) => result;
+}
+
+final class _FailingSearchRepository implements EventSearchRepository {
+  const _FailingSearchRepository();
+
+  @override
+  Future<List<Event>> loadCorpus({required int limit}) =>
+      Future.error(StateError('offline'));
 }
 
 final class _FakeSearchRepository implements EventSearchRepository {

@@ -39,3 +39,6 @@ estão descritos em `docs/natural_search.md`.
 
 As notificações opt-in, lembretes, avisos de alterações e limites anti-spam
 estão descritos em `docs/notifications.md`.
+
+Os estados de loading/empty/error, cache e offline parcial, animações, haptics
+e critérios de acessibilidade estão descritos em `docs/product_quality.md`.

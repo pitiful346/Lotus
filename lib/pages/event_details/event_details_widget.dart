@@ -4,6 +4,7 @@ import '/custom_code/event_mapping/events_record_to_event.dart';
 import '/custom_code/event_mapping/firestore_favorite_repository.dart';
 import '/custom_code/event_mapping/firestore_organizer_repository.dart';
 import '/custom_code/event_mapping/firestore_personalization_repository.dart';
+import '/custom_code/product_quality/lotus_product_quality.dart';
 import '/custom_code/widgets/event_details_content.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
@@ -37,6 +38,7 @@ class EventDetailsWidget extends StatefulWidget {
 class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   bool _isUpdatingFavorite = false;
   bool _viewRecorded = false;
+  int _detailsVersion = 0;
   late final FavoriteRepository _favoriteRepository;
   late final PersonalizationRepository _personalizationRepository;
 
@@ -58,10 +60,14 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
     }
 
     return StreamBuilder<EventsRecord>(
+      key: ValueKey(_detailsVersion),
       stream: EventsRecord.getDocument(initialRecord.reference),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return _EventDetailsUnavailable(onBack: context.safePop);
+          return _EventDetailsError(
+            onBack: context.safePop,
+            onRetry: () => setState(() => _detailsVersion += 1),
+          );
         }
         final record = snapshot.data;
         if (record == null) {
@@ -142,6 +148,7 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
     }
 
     setState(() => _isUpdatingFavorite = true);
+    unawaited(LotusProductFeedback.selection());
     try {
       await _favoriteRepository.setFavorite(
         userId: userId,
@@ -151,7 +158,9 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
       if (!isFavorite) {
         await _recordInteraction(userId, event, EventInteractionType.saved);
       }
+      unawaited(LotusProductFeedback.success());
     } catch (_) {
+      unawaited(LotusProductFeedback.error());
       _showMessage('Não foi possível atualizar os favoritos.');
     } finally {
       if (mounted) {
@@ -161,6 +170,7 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   }
 
   Future<void> _shareEvent(Event event) async {
+    unawaited(LotusProductFeedback.selection());
     final localStart = event.startsAt.toLocal();
     final localizations = MaterialLocalizations.of(context);
     final date = localizations.formatFullDate(localStart);
@@ -192,6 +202,7 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   }
 
   Future<void> _openDirections(Event event) async {
+    unawaited(LotusProductFeedback.selection());
     final coordinates = event.location.coordinates;
     if (coordinates == null) {
       return;
@@ -210,6 +221,7 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   }
 
   Future<void> _openTickets(Event event) async {
+    unawaited(LotusProductFeedback.selection());
     final uri = _ticketUri(event);
     if (uri == null) {
       return;
@@ -297,7 +309,7 @@ class _EventDetailsLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: Color(0xFF0A0E13),
-      body: Center(child: CircularProgressIndicator(color: Color(0xFFB7F34A))),
+      body: SafeArea(child: LotusSkeletonList(itemCount: 5)),
     );
   }
 }
@@ -320,15 +332,42 @@ class _EventDetailsUnavailable extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded),
         ),
       ),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Este evento já não está disponível.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 17),
-          ),
+      body: const LotusStateView(
+        kind: LotusStateKind.empty,
+        icon: Icons.event_busy_outlined,
+        title: 'Evento indisponível',
+        message: 'Este evento foi removido ou já não está publicado.',
+      ),
+    );
+  }
+}
+
+class _EventDetailsError extends StatelessWidget {
+  const _EventDetailsError({required this.onBack, required this.onRetry});
+
+  final VoidCallback onBack;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0E13),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0A0E13),
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          tooltip: 'Voltar',
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back_rounded),
         ),
+      ),
+      body: LotusStateView(
+        kind: LotusStateKind.offline,
+        title: 'Não foi possível atualizar o evento',
+        message:
+            'Verifica a ligação. A imagem e outros conteúdos já vistos podem continuar em cache.',
+        actionLabel: 'Tentar novamente',
+        onAction: onRetry,
       ),
     );
   }

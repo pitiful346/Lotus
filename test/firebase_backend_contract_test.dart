@@ -52,4 +52,14 @@ void main() {
     expect(rules, contains('match /{allPaths=**}'));
     expect(rules, isNot(contains('allow write: if true')));
   });
+
+  test('mobile Firestore cache is explicit and bounded', () {
+    final config = File(
+      'lib/backend/firebase/firebase_config.dart',
+    ).readAsStringSync();
+
+    expect(config, contains('persistenceEnabled: true'));
+    expect(config, contains('cacheSizeBytes: 50 * 1024 * 1024'));
+    expect(config, contains('if (kIsWeb)'));
+  });
 }

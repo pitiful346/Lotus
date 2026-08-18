@@ -1,9 +1,11 @@
 import '/auth/firebase_auth/auth_util.dart';
 import '/custom_code/notifications/firebase_notification_coordinator.dart';
 import '/custom_code/notifications/firestore_notification_preferences_repository.dart';
+import '/custom_code/product_quality/lotus_product_quality.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
+import 'dart:async';
 
 class LotusNotificationSettings extends StatefulWidget {
   const LotusNotificationSettings({super.key});
@@ -30,9 +32,18 @@ class _LotusNotificationSettingsState extends State<LotusNotificationSettings> {
       stream: _repository.watch(userId),
       initialData: const NotificationPreferences(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 220,
+            child: LotusSkeletonList(itemCount: 3, compact: true),
+          );
+        }
         if (snapshot.hasError) {
-          return const _NotificationMessage(
-            message: 'Não foi possível carregar as notificações.',
+          return const LotusStateView(
+            compact: true,
+            kind: LotusStateKind.offline,
+            title: 'Definições indisponíveis',
+            message: 'Verifica a ligação para alterar as notificações.',
           );
         }
         final preferences = snapshot.data ?? const NotificationPreferences();
@@ -127,7 +138,9 @@ class _LotusNotificationSettingsState extends State<LotusNotificationSettings> {
           userId,
         );
       }
+      unawaited(LotusProductFeedback.success());
     } catch (_) {
+      unawaited(LotusProductFeedback.error());
       if (mounted) {
         _showMessage('Não foi possível guardar esta preferência.');
       }
@@ -162,32 +175,41 @@ class _NotificationToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: FlutterFlowTheme.of(context).primary, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: FlutterFlowTheme.of(context).labelLarge),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: FlutterFlowTheme.of(context).bodySmall.override(
-                  color: FlutterFlowTheme.of(context).secondaryText,
-                  letterSpacing: 0,
-                ),
+    return Semantics(
+      container: true,
+      toggled: value,
+      enabled: enabled,
+      label: '$title. $subtitle',
+      onTap: enabled ? () => onChanged(!value) : null,
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Icon(icon, color: FlutterFlowTheme.of(context).primary, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: FlutterFlowTheme.of(context).labelLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: FlutterFlowTheme.of(context).bodySmall.override(
+                      color: FlutterFlowTheme.of(context).secondaryText,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            Switch.adaptive(
+              value: value,
+              onChanged: enabled ? onChanged : null,
+              activeThumbColor: FlutterFlowTheme.of(context).primary,
+            ),
+          ],
         ),
-        Switch.adaptive(
-          value: value,
-          onChanged: enabled ? onChanged : null,
-          activeThumbColor: FlutterFlowTheme.of(context).primary,
-        ),
-      ],
+      ),
     );
   }
 }
