@@ -57,6 +57,41 @@ void main() {
     expect(service.resetEmail, 'user@lotus.pt');
   });
 
+  testWidgets('auth keeps the FlutterFlow styling and switches both ways', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: LotusAuthScreen(service: _FakeAuthService())),
+    );
+
+    expect(find.byKey(const Key('auth-login-view')), findsOneWidget);
+    expect(find.text('Lotus'), findsOneWidget);
+    expect(find.byType(SegmentedButton<LotusAuthMode>), findsNothing);
+
+    final emailField = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const Key('auth-email')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(emailField.decoration?.filled, isTrue);
+    expect(emailField.decoration?.fillColor, const Color(0xFFFFFFFF));
+    final fieldBorder =
+        emailField.decoration?.enabledBorder as OutlineInputBorder;
+    expect(fieldBorder.borderRadius.topLeft.x, 8);
+
+    await tester.tap(find.byKey(const Key('show-register')));
+    await tester.pump();
+    expect(find.byKey(const Key('auth-register-view')), findsOneWidget);
+    expect(find.byKey(const Key('auth-name')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('show-login')));
+    await tester.pump();
+    expect(find.byKey(const Key('auth-login-view')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('account action confirms logout', (tester) async {
     final service = _FakeAuthService();
     await tester.pumpWidget(

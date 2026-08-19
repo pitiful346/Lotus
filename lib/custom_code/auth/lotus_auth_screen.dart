@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '/custom_code/product_quality/lotus_product_quality.dart';
+import '/flutter_flow/flutter_flow_theme.dart';
 import 'lotus_auth_service.dart';
 
 enum LotusAuthMode { login, register }
@@ -44,182 +45,31 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
   @override
   Widget build(BuildContext context) {
     final registering = _mode == LotusAuthMode.register;
-    return Scaffold(
-      backgroundColor: const Color(0xFF080C11),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: Form(
-                key: _formKey,
-                child: AutofillGroup(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Semantics(
-                        header: true,
-                        child: const Text(
-                          'LOTUS',
-                          style: TextStyle(
-                            color: lotusQualityAccent,
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 4,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        registering
-                            ? 'Cria a tua conta e começa a descobrir a cidade.'
-                            : 'Entra para guardares eventos e receberes recomendações.',
-                        style: const TextStyle(
-                          color: lotusQualityMuted,
-                          fontSize: 16,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      SegmentedButton<LotusAuthMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: LotusAuthMode.login,
-                            label: Text('Entrar'),
-                          ),
-                          ButtonSegment(
-                            value: LotusAuthMode.register,
-                            label: Text('Criar conta'),
-                          ),
-                        ],
-                        selected: {_mode},
-                        onSelectionChanged: _submitting
-                            ? null
-                            : (selection) => setState(() {
-                                _mode = selection.single;
-                                _error = null;
-                              }),
-                      ),
-                      const SizedBox(height: 24),
-                      LotusAnimatedSwap(
-                        child: registering
-                            ? Padding(
-                                key: const ValueKey('registration-name'),
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: TextFormField(
-                                  key: const Key('auth-name'),
-                                  controller: _nameController,
-                                  enabled: !_submitting,
-                                  autofillHints: const [AutofillHints.name],
-                                  textCapitalization: TextCapitalization.words,
-                                  textInputAction: TextInputAction.next,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Nome',
-                                    prefixIcon: Icon(Icons.person_outline),
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  validator: (value) =>
-                                      registering &&
-                                          (value?.trim().length ?? 0) < 2
-                                      ? 'Indica o teu nome.'
-                                      : null,
-                                ),
-                              )
-                            : const SizedBox.shrink(
-                                key: ValueKey('no-registration-name'),
-                              ),
-                      ),
-                      TextFormField(
-                        key: const Key('auth-email'),
-                        controller: _emailController,
-                        enabled: !_submitting,
-                        autofillHints: const [AutofillHints.email],
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.mail_outline),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateEmail,
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        key: const Key('auth-password'),
-                        controller: _passwordController,
-                        enabled: !_submitting,
-                        autofillHints: registering
-                            ? const [AutofillHints.newPassword]
-                            : const [AutofillHints.password],
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          labelText: 'Palavra-passe',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            tooltip: _obscurePassword
-                                ? 'Mostrar palavra-passe'
-                                : 'Ocultar palavra-passe',
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                            ),
-                          ),
-                        ),
-                        validator: (value) => (value?.length ?? 0) < 6
-                            ? 'Usa pelo menos 6 caracteres.'
-                            : null,
-                      ),
-                      if (_error case final error?) ...[
-                        const SizedBox(height: 16),
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(
-                            error,
-                            key: const Key('auth-error'),
-                            style: const TextStyle(color: Color(0xFFFF8A80)),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        height: 52,
-                        child: FilledButton(
-                          key: const Key('auth-submit'),
-                          onPressed: _submitting ? null : _submit,
-                          child: _submitting
-                              ? const SizedBox.square(
-                                  dimension: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(registering ? 'Criar conta' : 'Entrar'),
-                        ),
-                      ),
-                      if (!registering)
-                        TextButton(
-                          onPressed: _submitting ? null : _resetPassword,
-                          child: const Text('Recuperar palavra-passe'),
-                        ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'O login social poderá ser adicionado mais tarde sem alterar este fluxo.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: lotusQualityMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+    final theme = FlutterFlowTheme.of(context);
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
+      },
+      child: Scaffold(
+        backgroundColor: theme.primaryBackground,
+        body: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 460,
+                  minHeight: constraints.maxHeight - 100,
+                ),
+                child: IntrinsicHeight(
+                  child: Form(
+                    key: _formKey,
+                    child: AutofillGroup(
+                      child: registering
+                          ? _buildRegistration(theme)
+                          : _buildLogin(theme),
+                    ),
                   ),
                 ),
               ),
@@ -228,6 +78,397 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildLogin(FlutterFlowTheme theme) => Column(
+    key: const Key('auth-login-view'),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Semantics(
+        header: true,
+        child: Text(
+          'Lotus',
+          style: theme.headlineLarge.copyWith(
+            color: theme.primaryText,
+            height: 1.1,
+          ),
+        ),
+      ),
+      const SizedBox(height: 48),
+      Text(
+        'Qual é o teu email?',
+        style: theme.bodyMedium.copyWith(height: 1.4),
+      ),
+      const SizedBox(height: 24),
+      _authField(
+        key: const Key('auth-email'),
+        controller: _emailController,
+        label: 'Email',
+        autofillHints: const [AutofillHints.email],
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.next,
+        validator: _validateEmail,
+      ),
+      const SizedBox(height: 16),
+      _passwordField(registering: false),
+      _errorView(theme),
+      const SizedBox(height: 24),
+      _loginSubmitButton(theme),
+      const SizedBox(height: 16),
+      Align(
+        alignment: Alignment.center,
+        child: InkWell(
+          onTap: _submitting ? null : () => unawaited(_resetPassword()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Recuperar palavra-passe',
+              style: theme.bodyMedium.copyWith(color: theme.primary),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 24),
+      _divider(theme),
+      const SizedBox(height: 24),
+      _modePrompt(
+        theme: theme,
+        message: 'Ainda não tens conta?',
+        action: 'Criar conta',
+        key: const Key('show-register'),
+        onTap: () => _setMode(LotusAuthMode.register),
+      ),
+      const Spacer(),
+      const SizedBox(height: 32),
+      Text(
+        'Ao continuar, concordas com os Termos e a Política de Privacidade do Lotus.',
+        textAlign: TextAlign.center,
+        style: theme.bodySmall.copyWith(
+          color: theme.secondaryText,
+          height: 1.4,
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildRegistration(FlutterFlowTheme theme) => Column(
+    key: const Key('auth-register-view'),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        'Como te chamas?',
+        style: theme.headlineMedium.copyWith(
+          color: theme.primaryText,
+          height: 1.2,
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Cria a tua conta para descobrires o que acontece à tua volta.',
+        style: theme.bodyLarge.copyWith(
+          color: theme.secondaryText,
+          height: 1.5,
+        ),
+      ),
+      const SizedBox(height: 48),
+      Align(
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: 300,
+          child: Column(
+            children: [
+              _authField(
+                key: const Key('auth-name'),
+                controller: _nameController,
+                label: 'Nome',
+                autofillHints: const [AutofillHints.name],
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                validator: (value) => (value?.trim().length ?? 0) < 2
+                    ? 'Indica o teu nome.'
+                    : null,
+              ),
+              const SizedBox(height: 24),
+              _authField(
+                key: const Key('auth-email'),
+                controller: _emailController,
+                label: 'Email',
+                autofillHints: const [AutofillHints.email],
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                validator: _validateEmail,
+              ),
+              const SizedBox(height: 24),
+              _passwordField(registering: true),
+            ],
+          ),
+        ),
+      ),
+      _errorView(theme),
+      const Spacer(),
+      const SizedBox(height: 32),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Material(
+            color: theme.secondaryBackground,
+            shape: CircleBorder(side: BorderSide(color: theme.alternate)),
+            child: IconButton(
+              key: const Key('show-login'),
+              tooltip: 'Voltar ao login',
+              onPressed: _submitting
+                  ? null
+                  : () => _setMode(LotusAuthMode.login),
+              icon: const Icon(Icons.arrow_back),
+            ),
+          ),
+          _registrationSubmitButton(theme),
+        ],
+      ),
+    ],
+  );
+
+  Widget _authField({
+    required Key key,
+    required TextEditingController controller,
+    required String label,
+    required Iterable<String> autofillHints,
+    required TextInputAction textInputAction,
+    required String? Function(String?) validator,
+    TextInputType? keyboardType,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+    final border = OutlineInputBorder(
+      borderSide: const BorderSide(color: Colors.transparent),
+      borderRadius: BorderRadius.circular(8),
+    );
+    return TextFormField(
+      key: key,
+      controller: controller,
+      enabled: !_submitting,
+      autofillHints: autofillHints,
+      keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      textInputAction: textInputAction,
+      autocorrect: false,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: label,
+        labelStyle: theme.labelMedium,
+        enabledBorder: border,
+        focusedBorder: border,
+        errorBorder: border.copyWith(
+          borderSide: BorderSide(color: theme.error),
+        ),
+        focusedErrorBorder: border.copyWith(
+          borderSide: BorderSide(color: theme.error),
+        ),
+        filled: true,
+        fillColor: theme.secondaryBackground,
+      ),
+      style: theme.bodyMedium,
+      cursorColor: theme.primaryText,
+      validator: validator,
+    );
+  }
+
+  Widget _passwordField({required bool registering}) {
+    final theme = FlutterFlowTheme.of(context);
+    final border = OutlineInputBorder(
+      borderSide: const BorderSide(color: Colors.transparent),
+      borderRadius: BorderRadius.circular(8),
+    );
+    return TextFormField(
+      key: const Key('auth-password'),
+      controller: _passwordController,
+      enabled: !_submitting,
+      autofillHints: registering
+          ? const [AutofillHints.newPassword]
+          : const [AutofillHints.password],
+      obscureText: _obscurePassword,
+      textInputAction: TextInputAction.done,
+      onFieldSubmitted: (_) => unawaited(_submit()),
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Palavra-passe',
+        labelStyle: theme.labelMedium,
+        enabledBorder: border,
+        focusedBorder: border,
+        errorBorder: border.copyWith(
+          borderSide: BorderSide(color: theme.error),
+        ),
+        focusedErrorBorder: border.copyWith(
+          borderSide: BorderSide(color: theme.error),
+        ),
+        filled: true,
+        fillColor: theme.secondaryBackground,
+        suffixIcon: IconButton(
+          tooltip: _obscurePassword
+              ? 'Mostrar palavra-passe'
+              : 'Ocultar palavra-passe',
+          onPressed: _submitting
+              ? null
+              : () => setState(() {
+                  _obscurePassword = !_obscurePassword;
+                }),
+          icon: Icon(
+            _obscurePassword
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
+          ),
+        ),
+      ),
+      style: theme.bodyMedium,
+      cursorColor: theme.primaryText,
+      validator: (value) =>
+          (value?.length ?? 0) < 6 ? 'Usa pelo menos 6 caracteres.' : null,
+    );
+  }
+
+  Widget _errorView(FlutterFlowTheme theme) {
+    final error = _error;
+    if (error == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Semantics(
+        liveRegion: true,
+        child: Text(
+          error,
+          key: const Key('auth-error'),
+          style: theme.bodySmall.copyWith(color: theme.error),
+        ),
+      ),
+    );
+  }
+
+  Widget _loginSubmitButton(FlutterFlowTheme theme) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      key: const Key('auth-submit'),
+      onTap: _submitting ? null : () => unawaited(_submit()),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 160),
+        opacity: _submitting ? 0.65 : 1,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: theme.primary,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: _submitting
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  'Entrar',
+                  style: theme.bodyMedium.copyWith(
+                    color: theme.primaryBackground,
+                    height: 1.4,
+                  ),
+                ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _registrationSubmitButton(FlutterFlowTheme theme) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      key: const Key('auth-submit'),
+      onTap: _submitting ? null : () => unawaited(_submit()),
+      borderRadius: BorderRadius.circular(9999),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 160),
+        opacity: _submitting ? 0.65 : 1,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 160, minHeight: 52),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(9999),
+          ),
+          child: _submitting
+              ? const Center(
+                  child: SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Criar conta',
+                      style: theme.labelLarge.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.arrow_forward, color: theme.secondary, size: 18),
+                  ],
+                ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _divider(FlutterFlowTheme theme) => Row(
+    children: [
+      Expanded(child: Divider(color: theme.alternate, height: 1)),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text('ou', style: theme.bodyMedium.copyWith(height: 1.4)),
+      ),
+      Expanded(child: Divider(color: theme.alternate, height: 1)),
+    ],
+  );
+
+  Widget _modePrompt({
+    required FlutterFlowTheme theme,
+    required String message,
+    required String action,
+    required Key key,
+    required VoidCallback onTap,
+  }) => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Text(
+        message,
+        style: theme.bodySmall.copyWith(
+          color: theme.secondaryText,
+          height: 1.4,
+        ),
+      ),
+      const SizedBox(width: 4),
+      InkWell(
+        key: key,
+        onTap: _submitting ? null : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            action,
+            style: theme.bodyMedium.copyWith(color: theme.primary),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  void _setMode(LotusAuthMode mode) {
+    if (_submitting || _mode == mode) return;
+    setState(() {
+      _mode = mode;
+      _error = null;
+    });
   }
 
   String? _validateEmail(String? value) {

@@ -53,11 +53,7 @@ class _LotusOnboardingGateState extends State<LotusOnboardingGate> {
                 title: 'Não foi possível preparar a app',
                 message: 'Verifica a ligação e tenta novamente.',
                 actionLabel: 'Tentar novamente',
-                onAction: () => setState(
-                  () => _cachedCompletion = _repository.readCachedCompletion(
-                    widget.userId,
-                  ),
-                ),
+                onAction: _reloadCachedCompletion,
               );
             }
             if (!snapshot.hasData) return const _OnboardingLoading();
@@ -71,6 +67,14 @@ class _LotusOnboardingGateState extends State<LotusOnboardingGate> {
         );
       },
     );
+  }
+
+  void _reloadCachedCompletion() {
+    final nextCompletion = _repository.readCachedCompletion(widget.userId);
+    if (!mounted) return;
+    setState(() {
+      _cachedCompletion = nextCompletion;
+    });
   }
 }
 

@@ -91,6 +91,32 @@ void main() {
     expect(find.text('A cidade acontece aqui'), findsNothing);
   });
 
+  testWidgets(
+    'retry refreshes bootstrap without returning a Future to setState',
+    (tester) async {
+      final repository = _FakeOnboardingRepository(streamFails: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LotusOnboardingGate(
+            userId: 'user-retry',
+            repository: repository,
+            child: const Text('Home pronta'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Não foi possível preparar a app'), findsOneWidget);
+      expect(repository.cachedReadCalls, 1);
+
+      await tester.tap(find.text('Tentar novamente'));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(repository.cachedReadCalls, 2);
+    },
+  );
+
   test('initial city maps to a stable camera position', () {
     expect(
       lotusCoordinatesForCity('Porto').latitude,
@@ -108,11 +134,13 @@ void main() {
 }
 
 final class _FakeOnboardingRepository implements LotusOnboardingRepository {
-  _FakeOnboardingRepository({this.cachedCompletion});
+  _FakeOnboardingRepository({this.cachedCompletion, this.streamFails = false});
 
   final bool? cachedCompletion;
+  final bool streamFails;
   String? completedUserId;
   LotusOnboardingSelection? selection;
+  int cachedReadCalls = 0;
 
   @override
   Future<void> complete(
@@ -124,11 +152,15 @@ final class _FakeOnboardingRepository implements LotusOnboardingRepository {
   }
 
   @override
-  Future<bool?> readCachedCompletion(String userId) async => cachedCompletion;
+  Future<bool?> readCachedCompletion(String userId) async {
+    cachedReadCalls += 1;
+    return cachedCompletion;
+  }
 
   @override
-  Stream<bool> watchCompletion(String userId) =>
-      Stream.value(cachedCompletion ?? false);
+  Stream<bool> watchCompletion(String userId) => streamFails
+      ? Stream.error(StateError('offline'))
+      : Stream.value(cachedCompletion ?? false);
 }
 
 final class _GrantedLocationGateway implements UserLocationGateway {

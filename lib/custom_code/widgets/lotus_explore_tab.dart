@@ -243,7 +243,10 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
       _repository = FirestoreEventSearchRepository();
     }
     final next = _repository.loadCorpus(limit: 80);
-    setState(() => _events = next);
+    if (!mounted) return;
+    setState(() {
+      _events = next;
+    });
     await next;
   }
 

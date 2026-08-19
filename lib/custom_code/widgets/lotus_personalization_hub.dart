@@ -130,7 +130,11 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
   }
 
   void _reloadCorpus() {
-    setState(() => _corpus = _events.loadCorpus(limit: 200));
+    final nextCorpus = _events.loadCorpus(limit: 200);
+    if (!mounted) return;
+    setState(() {
+      _corpus = nextCorpus;
+    });
   }
 
   void _reloadProfile() {
