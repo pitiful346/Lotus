@@ -12,19 +12,21 @@ const _eventSourceId = 'lotus-events';
 const _clusterLayerId = 'lotus-event-clusters';
 const _clusterCountLayerId = 'lotus-event-cluster-count';
 const _eventLayerId = 'lotus-event-pins';
-const _regularPinImageId = 'lotus-event-pin';
-const _featuredPinImageId = 'lotus-featured-event-pin';
-const _pinWidth = 88;
-const _pinHeight = 104;
-const _initialZoom = 13.5;
-const _explorationPitch = 42.0;
+const _pinImagePrefix = 'lotus-event-pin';
+const _pinCanvasSize = 64;
+const _initialZoom = 14.0;
+const _explorationPitch = 44.0;
+const _eventPreviewCameraPadding = 300.0;
+final Map<String, Uint8List> _pinImageCache = {};
 bool get isLotusHomeMapSupported => Platform.isAndroid || Platform.isIOS;
 
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
+  required VoidCallback onMapTapEmpty,
   required ValueChanged<MapViewportBounds> onViewportChanged,
   required VoidCallback onUserMapGesture,
+  required String? selectedEventId,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
   required GeoCoordinates initialCenter,
@@ -40,8 +42,10 @@ Widget buildLotusHomeMap({
   return _NativeLotusHomeMap(
     events: events,
     onEventTap: onEventTap,
+    onMapTapEmpty: onMapTapEmpty,
     onViewportChanged: onViewportChanged,
     onUserMapGesture: onUserMapGesture,
+    selectedEventId: selectedEventId,
     userCoordinates: userCoordinates,
     centerOnUserRequest: centerOnUserRequest,
     initialCenter: initialCenter,
@@ -52,8 +56,10 @@ class _NativeLotusHomeMap extends StatefulWidget {
   const _NativeLotusHomeMap({
     required this.events,
     required this.onEventTap,
+    required this.onMapTapEmpty,
     required this.onViewportChanged,
     required this.onUserMapGesture,
+    required this.selectedEventId,
     required this.userCoordinates,
     required this.centerOnUserRequest,
     required this.initialCenter,
@@ -61,8 +67,10 @@ class _NativeLotusHomeMap extends StatefulWidget {
 
   final List<Event> events;
   final ValueChanged<String> onEventTap;
+  final VoidCallback onMapTapEmpty;
   final ValueChanged<MapViewportBounds> onViewportChanged;
   final VoidCallback onUserMapGesture;
+  final String? selectedEventId;
   final GeoCoordinates? userCoordinates;
   final int centerOnUserRequest;
   final GeoCoordinates initialCenter;
@@ -102,6 +110,14 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.events, widget.events)) {
       _requestEventSync();
+    }
+    if (oldWidget.selectedEventId != widget.selectedEventId) {
+      _requestEventSync();
+      if (widget.selectedEventId == null) {
+        _clearEventPreviewPadding();
+      } else {
+        _focusSelectedEvent();
+      }
     }
     if (oldWidget.userCoordinates != widget.userCoordinates) {
       _updateUserLocationSettings();
@@ -166,7 +182,9 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     }
     final source = await mapboxMap.style.getSource(_eventSourceId);
     if (source is GeoJsonSource) {
-      await source.updateGeoJSON(_eventFeatureCollection(widget.events));
+      await source.updateGeoJSON(
+        _eventFeatureCollection(widget.events, widget.selectedEventId),
+      );
     }
   }
 
@@ -178,14 +196,13 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     _isStyleReady = false;
     await _applyDarkStyle();
 
-    await _addPinImage(mapboxMap, id: _regularPinImageId, isFeatured: false);
-    await _addPinImage(mapboxMap, id: _featuredPinImageId, isFeatured: true);
+    await _addPinImages(mapboxMap);
 
     if (!await mapboxMap.style.styleSourceExists(_eventSourceId)) {
       await mapboxMap.style.addSource(
         GeoJsonSource(
           id: _eventSourceId,
-          data: _eventFeatureCollection(widget.events),
+          data: _eventFeatureCollection(widget.events, widget.selectedEventId),
           cluster: true,
           clusterRadius: 52,
           clusterMaxZoom: 14,
@@ -202,29 +219,31 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     }
     _isStyleReady = true;
     _requestEventSync();
+    await _reportViewport();
   }
 
-  Future<void> _addPinImage(
-    MapboxMap mapboxMap, {
-    required String id,
-    required bool isFeatured,
-  }) async {
-    if (await mapboxMap.style.hasStyleImage(id)) {
-      return;
+  Future<void> _addPinImages(MapboxMap mapboxMap) async {
+    for (final category in _LotusPinCategory.values) {
+      for (final selected in const [false, true]) {
+        final id = _pinImageId(category, selected: selected);
+        if (await mapboxMap.style.hasStyleImage(id)) {
+          continue;
+        }
+        final bytes = _pinImageCache[id] ??= await _renderPinImage(
+          category: category,
+          selected: selected,
+        );
+        await mapboxMap.style.addStyleImage(
+          id,
+          1,
+          MbxImage(width: _pinCanvasSize, height: _pinCanvasSize, data: bytes),
+          false,
+          const [],
+          const [],
+          null,
+        );
+      }
     }
-    await mapboxMap.style.addStyleImage(
-      id,
-      1,
-      MbxImage(
-        width: _pinWidth,
-        height: _pinHeight,
-        data: await _renderPinImage(isFeatured: isFeatured),
-      ),
-      false,
-      const [],
-      const [],
-      null,
-    );
   }
 
   Future<void> _addLayerIfMissing(
@@ -257,18 +276,25 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       }
     }
     if (result == null) {
+      widget.onMapTapEmpty();
       return;
     }
 
     if (result.layers.contains(_clusterLayerId)) {
+      widget.onMapTapEmpty();
       final camera = await mapboxMap.getCameraState();
       await mapboxMap.easeTo(
         CameraOptions(
           center: context.point,
           zoom: (camera.zoom + 2).clamp(0, 16).toDouble(),
+          bearing: camera.bearing,
+          pitch: camera.pitch,
+          padding: camera.padding,
         ),
         MapAnimationOptions(duration: 500, startDelay: 0),
       );
+      await Future<void>.delayed(const Duration(milliseconds: 520));
+      await _reportViewport();
       return;
     }
 
@@ -320,16 +346,15 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       return;
     }
 
-    await mapboxMap.style.setStyleImportConfigProperty(
-      'basemap',
-      'lightPreset',
-      'night',
-    );
-    await mapboxMap.style.setStyleImportConfigProperty(
-      'basemap',
-      'show3dObjects',
-      true,
-    );
+    await mapboxMap.style.setStyleImportConfigProperties('basemap', {
+      'lightPreset': 'night',
+      'show3dObjects': true,
+      'show3dBuildings': true,
+      'show3dLandmarks': true,
+      'show3dTrees': true,
+      'show3dFacades': true,
+      'showPointOfInterestLabels': false,
+    });
   }
 
   Future<void> _updateUserLocationSettings() async {
@@ -356,16 +381,78 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     if (mapboxMap == null || coordinates == null) {
       return;
     }
+    final camera = await mapboxMap.getCameraState();
     await mapboxMap.flyTo(
       CameraOptions(
         center: Point(
           coordinates: Position(coordinates.longitude, coordinates.latitude),
         ),
         zoom: 15.5,
-        bearing: 0,
-        pitch: _explorationPitch,
+        bearing: camera.bearing,
+        pitch: camera.pitch,
+        padding: MbxEdgeInsets(top: 0, left: 0, bottom: 0, right: 0),
       ),
       MapAnimationOptions(duration: 900, startDelay: 0),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 920));
+    if (!mounted || _mapboxMap != mapboxMap) return;
+    await _reportViewport();
+  }
+
+  void _onUserCameraGesture(MapContentGestureContext context) {
+    widget.onUserMapGesture();
+    if (context.gestureState == GestureState.ended) {
+      _reportViewport();
+    }
+  }
+
+  Future<void> _focusSelectedEvent() async {
+    final mapboxMap = _mapboxMap;
+    final eventId = widget.selectedEventId;
+    if (mapboxMap == null || eventId == null) return;
+    Event? selectedEvent;
+    for (final event in widget.events) {
+      if (event.id == eventId) {
+        selectedEvent = event;
+        break;
+      }
+    }
+    final coordinates = selectedEvent?.location.coordinates;
+    if (coordinates == null) return;
+    final camera = await mapboxMap.getCameraState();
+    final targetZoom = camera.zoom < 14.25 ? 14.25 : camera.zoom;
+    await mapboxMap.easeTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(coordinates.longitude, coordinates.latitude),
+        ),
+        zoom: targetZoom.clamp(0, 16).toDouble(),
+        bearing: camera.bearing,
+        pitch: camera.pitch,
+        padding: MbxEdgeInsets(
+          top: 0,
+          left: 0,
+          bottom: _eventPreviewCameraPadding,
+          right: 0,
+        ),
+      ),
+      MapAnimationOptions(duration: 550, startDelay: 0),
+    );
+  }
+
+  Future<void> _clearEventPreviewPadding() async {
+    final mapboxMap = _mapboxMap;
+    if (mapboxMap == null) return;
+    final camera = await mapboxMap.getCameraState();
+    await mapboxMap.easeTo(
+      CameraOptions(
+        center: camera.center,
+        zoom: camera.zoom,
+        bearing: camera.bearing,
+        pitch: camera.pitch,
+        padding: MbxEdgeInsets(top: 0, left: 0, bottom: 0, right: 0),
+      ),
+      MapAnimationOptions(duration: 220, startDelay: 0),
     );
   }
 
@@ -389,8 +476,8 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       onMapCreated: _onMapCreated,
       onStyleLoadedListener: (_) => _onStyleLoaded(),
       onMapIdleListener: (_) => _reportViewport(),
-      onScrollListener: (_) => widget.onUserMapGesture(),
-      onZoomListener: (_) => widget.onUserMapGesture(),
+      onScrollListener: _onUserCameraGesture,
+      onZoomListener: _onUserCameraGesture,
       // The SDK keeps this callback for compatibility while typed layer
       // interactions mature; querying only Lotus layers keeps the hit test
       // narrow and deterministic.
@@ -400,7 +487,7 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   }
 }
 
-String _eventFeatureCollection(List<Event> events) {
+String _eventFeatureCollection(List<Event> events, String? selectedEventId) {
   return jsonEncode({
     'type': 'FeatureCollection',
     'features': [
@@ -408,7 +495,14 @@ String _eventFeatureCollection(List<Event> events) {
         if (event.location.coordinates case final coordinates?)
           {
             'type': 'Feature',
-            'properties': {'eventId': event.id, 'featured': event.isFeatured},
+            'properties': {
+              'eventId': event.id,
+              'selected': event.id == selectedEventId,
+              'pinImage': _pinImageId(
+                _pinCategory(event),
+                selected: event.id == selectedEventId,
+              ),
+            },
             'geometry': {
               'type': 'Point',
               'coordinates': [coordinates.longitude, coordinates.latitude],
@@ -460,63 +554,127 @@ Map<String, Object> _unclusteredEventLayer() => {
     ['has', 'point_count'],
   ],
   'layout': {
-    'icon-image': [
-      'case',
-      [
-        '==',
-        ['get', 'featured'],
-        true,
-      ],
-      _featuredPinImageId,
-      _regularPinImageId,
-    ],
-    'icon-anchor': 'bottom',
+    'icon-image': ['get', 'pinImage'],
+    'icon-anchor': 'center',
     'icon-size': [
       'case',
       [
         '==',
-        ['get', 'featured'],
+        ['get', 'selected'],
         true,
       ],
-      0.62,
-      0.55,
+      0.80,
+      0.68,
     ],
     'icon-allow-overlap': true,
   },
 };
 
-Future<Uint8List> _renderPinImage({required bool isFeatured}) async {
-  const width = 88.0;
-  const height = 104.0;
+enum _LotusPinCategory {
+  music,
+  theatre,
+  party,
+  sport,
+  culture,
+  food,
+  workshop,
+  comedy,
+  other,
+}
+
+_LotusPinCategory _pinCategory(Event event) {
+  for (final rawCategory in event.categoryIds) {
+    final category = rawCategory.trim().toLowerCase();
+    if (category.contains('music')) return _LotusPinCategory.music;
+    if (category.contains('teatr')) return _LotusPinCategory.theatre;
+    if (category.contains('fest') || category.contains('party')) {
+      return _LotusPinCategory.party;
+    }
+    if (category.contains('desport') || category.contains('sport')) {
+      return _LotusPinCategory.sport;
+    }
+    if (category.contains('cultur') || category.contains('cinema')) {
+      return _LotusPinCategory.culture;
+    }
+    if (category.contains('gastr') || category.contains('food')) {
+      return _LotusPinCategory.food;
+    }
+    if (category.contains('workshop') || category.contains('oficina')) {
+      return _LotusPinCategory.workshop;
+    }
+    if (category.contains('comed')) return _LotusPinCategory.comedy;
+  }
+  return _LotusPinCategory.other;
+}
+
+String _pinImageId(_LotusPinCategory category, {required bool selected}) =>
+    '$_pinImagePrefix-${category.name}${selected ? '-selected' : ''}';
+
+IconData _pinIcon(_LotusPinCategory category) => switch (category) {
+  _LotusPinCategory.music => Icons.music_note,
+  _LotusPinCategory.theatre => Icons.theater_comedy,
+  _LotusPinCategory.party => Icons.bolt,
+  _LotusPinCategory.sport => Icons.sports_soccer,
+  _LotusPinCategory.culture => Icons.account_balance,
+  _LotusPinCategory.food => Icons.restaurant,
+  _LotusPinCategory.workshop => Icons.build,
+  _LotusPinCategory.comedy => Icons.sentiment_satisfied,
+  _LotusPinCategory.other => Icons.local_activity,
+};
+
+Future<Uint8List> _renderPinImage({
+  required _LotusPinCategory category,
+  required bool selected,
+}) async {
+  const size = 64.0;
+  const center = Offset(size / 2, size / 2);
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  final path = Path()
-    ..moveTo(width / 2, height - 6)
-    ..cubicTo(34, 82, 14, 62, 14, 38)
-    ..cubicTo(14, 18, 27, 6, width / 2, 6)
-    ..cubicTo(61, 6, 74, 18, 74, 38)
-    ..cubicTo(74, 62, 54, 82, width / 2, height - 6)
-    ..close();
-
-  canvas.drawShadow(path, const Color(0xAA000000), 8, true);
-  canvas.drawPath(
-    path,
+  if (selected) {
+    canvas.drawCircle(center, 27, Paint()..color = const Color(0x3DB7F34A));
+  }
+  canvas.drawCircle(
+    center.translate(0, 2),
+    21,
     Paint()
-      ..color = isFeatured ? const Color(0xFFFF6B5E) : const Color(0xFFB7F34A),
+      ..color = const Color(0x73000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
   );
   canvas.drawCircle(
-    const Offset(width / 2, 38),
-    15,
-    Paint()..color = const Color(0xFF11161D),
+    center,
+    selected ? 22.5 : 21,
+    Paint()
+      ..color = selected ? const Color(0xFFF7FAFC) : const Color(0xFF11161D),
   );
   canvas.drawCircle(
-    const Offset(width / 2, 38),
-    6,
-    Paint()..color = const Color(0xFFFFFFFF),
+    center,
+    selected ? 19.5 : 18,
+    Paint()..color = const Color(0xFFB7F34A),
+  );
+
+  final icon = _pinIcon(category);
+  final iconPainter = TextPainter(
+    text: TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        color: const Color(0xFF11161D),
+        fontSize: selected ? 20 : 18,
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  iconPainter.paint(
+    canvas,
+    Offset(
+      center.dx - iconPainter.width / 2,
+      center.dy - iconPainter.height / 2,
+    ),
   );
 
   final picture = recorder.endRecording();
-  final image = await picture.toImage(width.toInt(), height.toInt());
+  final image = await picture.toImage(_pinCanvasSize, _pinCanvasSize);
   // The native Mapbox bridges decode this payload as an encoded platform
   // image (UIImage/Bitmap), so provide PNG bytes rather than Flutter's raw
   // pixel buffer.

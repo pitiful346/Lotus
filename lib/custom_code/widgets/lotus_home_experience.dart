@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 import '../onboarding/lotus_onboarding_repository.dart';
+import '../event_mapping/firestore_favorite_repository.dart';
 import 'lotus_home_map.dart';
 
 class LotusHomeExperience extends StatelessWidget {
-  const LotusHomeExperience({super.key, this.repository});
+  const LotusHomeExperience({
+    super.key,
+    this.repository,
+    this.favoriteRepository,
+  });
 
   final LotusInitialCityRepository? repository;
+  final FavoriteRepository? favoriteRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +26,20 @@ class LotusHomeExperience extends StatelessWidget {
       initialData: 'Porto',
       builder: (context, snapshot) {
         final city = snapshot.data ?? 'Porto';
-        return LotusHomeMap(
-          key: ValueKey('lotus-home-$city'),
-          initialCenter: lotusCoordinatesForCity(city),
+        final favorites = favoriteRepository ?? FirestoreFavoriteRepository();
+        return StreamBuilder<Set<String>>(
+          stream: favorites.watchFavoriteEventIds(userId),
+          initialData: const {},
+          builder: (context, favoritesSnapshot) => LotusHomeMap(
+            key: ValueKey('lotus-home-$city'),
+            initialCenter: lotusCoordinatesForCity(city),
+            favoriteEventIds: favoritesSnapshot.data ?? const {},
+            onToggleFavorite: (event, isFavorite) => favorites.setFavorite(
+              userId: userId,
+              eventId: event.id,
+              isFavorite: !isFavorite,
+            ),
+          ),
         );
       },
     );

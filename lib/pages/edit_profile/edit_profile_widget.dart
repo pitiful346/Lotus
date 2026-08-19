@@ -98,7 +98,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                             },
                           ),
                           Text(
-                            'Edit Profile',
+                            'Editar perfil',
                             style: FlutterFlowTheme.of(context)
                                 .titleLarge
                                 .override(
@@ -167,15 +167,26 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                   ),
                                 ),
                                 child: AuthUserStreamWidget(
-                                  builder: (context) => CachedNetworkImage(
-                                    fadeInDuration: Duration(milliseconds: 0),
-                                    fadeOutDuration: Duration(milliseconds: 0),
-                                    imageUrl: valueOrDefault<String>(
-                                      currentUserPhoto,
-                                      'https://dimg.dreamflow.cloud/v1/image/professional%20headshot%20of%20a%20stylish%20person%20smiling',
-                                    ),
-                                    fit: BoxFit.cover,
-                                  ),
+                                  builder: (context) => currentUserPhoto.trim().isEmpty
+                                      ? Container(
+                                          color: FlutterFlowTheme.of(context)
+                                              .primaryBackground,
+                                          alignment: Alignment.center,
+                                          child: Icon(
+                                            Icons.person_rounded,
+                                            size: 58.0,
+                                            color: FlutterFlowTheme.of(context)
+                                                .primary,
+                                          ),
+                                        )
+                                      : CachedNetworkImage(
+                                          fadeInDuration:
+                                              Duration(milliseconds: 0),
+                                          fadeOutDuration:
+                                              Duration(milliseconds: 0),
+                                          imageUrl: currentUserPhoto,
+                                          fit: BoxFit.cover,
+                                        ),
                                 ),
                               ),
                             ),
@@ -311,7 +322,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                'Profile Info',
+                                'Dados do perfil',
                                 style: FlutterFlowTheme.of(context)
                                     .titleMedium
                                     .override(
@@ -342,7 +353,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                         CrossAxisAlignment.stretch,
                                     children: [
                                       Text(
-                                        'Full Name',
+                                        'Nome completo',
                                         style: FlutterFlowTheme.of(context)
                                             .labelSmall
                                             .override(
@@ -371,7 +382,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                             ),
                                       ),
                                       Container(
-                                        height: 70.0,
+                                        height: 86.0,
                                         decoration: BoxDecoration(
                                           color: FlutterFlowTheme.of(context)
                                               .secondaryBackground,
@@ -450,7 +461,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                                           .fontStyle,
                                                                     ),
                                                             hintText:
-                                                                'Your Name',
+                                                                'O teu nome',
                                                             hintStyle:
                                                                 FlutterFlowTheme.of(
                                                                         context)
@@ -611,7 +622,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                         CrossAxisAlignment.stretch,
                                     children: [
                                       Text(
-                                        'Phone Number',
+                                        'Número de telefone',
                                         style: FlutterFlowTheme.of(context)
                                             .labelSmall
                                             .override(
@@ -640,7 +651,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                             ),
                                       ),
                                       Container(
-                                        height: 70.0,
+                                        height: 86.0,
                                         decoration: BoxDecoration(
                                           color: FlutterFlowTheme.of(context)
                                               .secondaryBackground,
@@ -719,7 +730,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                                           .fontStyle,
                                                                     ),
                                                             hintText:
-                                                                'Your Name',
+                                                                'Número de telefone',
                                                             hintStyle:
                                                                 FlutterFlowTheme.of(
                                                                         context)
@@ -880,7 +891,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                         CrossAxisAlignment.stretch,
                                     children: [
                                       Text(
-                                        'Email Address',
+                                        'Email',
                                         style: FlutterFlowTheme.of(context)
                                             .labelSmall
                                             .override(
@@ -909,7 +920,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                             ),
                                       ),
                                       Container(
-                                        height: 70.0,
+                                        height: 86.0,
                                         decoration: BoxDecoration(
                                           color: FlutterFlowTheme.of(context)
                                               .secondaryBackground,
@@ -955,7 +966,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                         focusNode: _model
                                                             .textFieldFocusNode3,
                                                         autofocus: false,
-                                                        enabled: true,
+                                                        readOnly: true,
                                                         obscureText: false,
                                                         decoration:
                                                             InputDecoration(
@@ -987,7 +998,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                                         .labelMedium
                                                                         .fontStyle,
                                                                   ),
-                                                          hintText: 'Your Name',
+                                                          hintText: 'Email da conta',
                                                           hintStyle:
                                                               FlutterFlowTheme.of(
                                                                       context)
@@ -1074,7 +1085,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                                   .of(context)
                                                               .secondaryBackground,
                                                           suffixIcon: Icon(
-                                                            Icons.edit,
+                                                            Icons.lock_outline,
                                                             color: FlutterFlowTheme
                                                                     .of(context)
                                                                 .primary,
@@ -1161,7 +1172,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Text(
-                                'Account Security',
+                                'Segurança da conta',
                                 style: FlutterFlowTheme.of(context)
                                     .titleMedium
                                     .override(
@@ -1244,7 +1255,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                       .showSnackBar(
                                                     SnackBar(
                                                       content: Text(
-                                                        'Email required!',
+                                                        'É necessário um email.',
                                                       ),
                                                     ),
                                                   );
@@ -1258,7 +1269,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                     .showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                      'We\'ve sent a link to your email so you can change your password!',
+                                                      'Enviámos um link para o teu email para alterares a palavra-passe.',
                                                       style: TextStyle(
                                                         color:
                                                             FlutterFlowTheme.of(
@@ -1323,7 +1334,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                               .start,
                                                       children: [
                                                         Text(
-                                                          'Password',
+                                                          'Palavra-passe',
                                                           style: FlutterFlowTheme
                                                                   .of(context)
                                                               .labelLarge
@@ -1355,7 +1366,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                               ),
                                                         ),
                                                         Text(
-                                                          'Last changed 3 months ago',
+                                                          'Alterar através do email',
                                                           style: FlutterFlowTheme
                                                                   .of(context)
                                                               .bodySmall
@@ -1472,7 +1483,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                             .start,
                                                     children: [
                                                       Text(
-                                                        '2-Step Verification',
+                                                        'Verificação em dois passos',
                                                         style:
                                                             FlutterFlowTheme.of(
                                                                     context)
@@ -1505,7 +1516,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                                                 ),
                                                       ),
                                                       Text(
-                                                        'Enabled for extra security',
+                                                        'Ainda não configurada',
                                                         style:
                                                             FlutterFlowTheme.of(
                                                                     context)
@@ -1614,7 +1625,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Profile updated successfully!',
+                                'Perfil atualizado com sucesso!',
                                 style: TextStyle(
                                   color:
                                       FlutterFlowTheme.of(context).primaryText,
@@ -1671,7 +1682,7 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                           height: 0.0,
                                         ),
                                         Text(
-                                          'Update Profile',
+                                          'Atualizar perfil',
                                           style: FlutterFlowTheme.of(context)
                                               .labelMedium
                                               .override(

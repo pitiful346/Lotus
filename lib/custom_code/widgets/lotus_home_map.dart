@@ -17,7 +17,7 @@ import '/custom_code/product_quality/lotus_product_quality.dart';
 import 'dart:async';
 import 'package:lotus_core/lotus_core.dart';
 
-import '../event_mapping/firestore_map_event_repository.dart';
+import '../event_mapping/development_map_event_repository.dart';
 import '../location/user_location_controller.dart';
 import 'event_filter_sheet.dart';
 import 'event_map_preview_card.dart';
@@ -35,6 +35,8 @@ class LotusHomeMap extends StatefulWidget {
     this.locationController,
     this.eventRepository,
     this.initialCenter,
+    this.favoriteEventIds = const {},
+    this.onToggleFavorite,
   });
 
   /// Injectable for tests and future repository implementations.
@@ -44,12 +46,17 @@ class LotusHomeMap extends StatefulWidget {
   final UserLocationController? locationController;
   final MapEventRepository? eventRepository;
   final GeoCoordinates? initialCenter;
+  final Set<String> favoriteEventIds;
+  final Future<void> Function(Event event, bool isFavorite)? onToggleFavorite;
 
   @override
   State<LotusHomeMap> createState() => _LotusHomeMapState();
 }
 
 class _LotusHomeMapState extends State<LotusHomeMap> {
+  static const _autoSelectFirstDevelopmentEvent = bool.fromEnvironment(
+    'LOTUS_AUTO_SELECT_DEV_EVENT',
+  );
   late UserLocationController _locationController;
   late bool _ownsLocationController;
   late MapEventRepository _eventRepository;
@@ -62,14 +69,16 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   EventFilters _filters = EventFilters();
   String? _selectedEventId;
   String? _openingEventId;
+  String? _updatingFavoriteId;
   int _centerOnUserRequest = 0;
   bool _isCenteredOnUser = false;
+  bool _didAutoSelectDevelopmentEvent = false;
 
   @override
   void initState() {
     super.initState();
     _eventRepository =
-        widget.eventRepository ?? const FirestoreMapEventRepository();
+        widget.eventRepository ?? createLotusMapEventRepository();
     _attachLocationController();
   }
 
@@ -84,7 +93,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     if (oldWidget.eventRepository != widget.eventRepository) {
       _eventRequestVersion += 1;
       _eventRepository =
-          widget.eventRepository ?? const FirestoreMapEventRepository();
+          widget.eventRepository ?? createLotusMapEventRepository();
       _events = const [];
       _searchedViewport = null;
       _isLoadingEvents = false;
@@ -174,9 +183,21 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         _events = events;
         _searchedViewport = bounds;
         _isLoadingEvents = false;
-        _selectedEventId = events.any((event) => event.id == _selectedEventId)
-            ? _selectedEventId
-            : null;
+        final currentSelectionIsVisible = events.any(
+          (event) => event.id == _selectedEventId,
+        );
+        if (currentSelectionIsVisible) {
+          return;
+        }
+        if (_autoSelectFirstDevelopmentEvent &&
+            !_didAutoSelectDevelopmentEvent &&
+            events.isNotEmpty &&
+            isDevelopmentEvent(events.first.id)) {
+          _selectedEventId = events.first.id;
+          _didAutoSelectDevelopmentEvent = true;
+        } else {
+          _selectedEventId = null;
+        }
       });
     } catch (_) {
       if (!mounted || requestVersion != _eventRequestVersion) {
@@ -205,6 +226,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
       setState(() {
         _centerOnUserRequest += 1;
         _isCenteredOnUser = true;
+        _selectedEventId = null;
       });
       return;
     }
@@ -251,6 +273,17 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
       return;
     }
 
+    if (isDevelopmentEvent(event.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'O detalhe completo fica disponível com eventos do backend.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _openingEventId = event.id);
     try {
       final reference = FirebaseFirestore.instance.doc(event.id);
@@ -276,6 +309,50 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     } finally {
       if (mounted) {
         setState(() => _openingEventId = null);
+      }
+    }
+  }
+
+  Future<void> _toggleFavorite(Event event) async {
+    final callback = widget.onToggleFavorite;
+    if (callback == null || _updatingFavoriteId != null) {
+      return;
+    }
+    if (isDevelopmentEvent(event.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Os favoritos requerem um evento do backend.'),
+        ),
+      );
+      return;
+    }
+
+    final wasFavorite = widget.favoriteEventIds.contains(event.id);
+    setState(() => _updatingFavoriteId = event.id);
+    try {
+      await callback(event, wasFavorite);
+      if (!mounted) return;
+      unawaited(LotusProductFeedback.selection());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasFavorite
+                ? 'Evento removido dos favoritos.'
+                : 'Evento guardado nos favoritos.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      unawaited(LotusProductFeedback.error());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível atualizar os favoritos.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingFavoriteId = null);
       }
     }
   }
@@ -374,8 +451,10 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
           child: platform.buildLotusHomeMap(
             events: visibleEvents,
             onEventTap: (eventId) => _selectEvent(eventId, eventsById),
+            onMapTapEmpty: _clearSelectedEvent,
             onViewportChanged: _handleViewportChanged,
             onUserMapGesture: _handleUserMapGesture,
+            selectedEventId: _selectedEventId,
             userCoordinates: locationState.coordinates,
             centerOnUserRequest: _centerOnUserRequest,
             initialCenter:
@@ -424,8 +503,15 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
                   event: selectedEvent,
                   distanceMeters: _distanceTo(selectedEvent),
                   isOpening: _openingEventId == selectedEvent.id,
+                  isFavorite: widget.favoriteEventIds.contains(
+                    selectedEvent.id,
+                  ),
+                  isUpdatingFavorite: _updatingFavoriteId == selectedEvent.id,
                   bottomInset: 108,
-                  onClose: () => setState(() => _selectedEventId = null),
+                  onClose: _clearSelectedEvent,
+                  onToggleFavorite: widget.onToggleFavorite == null
+                      ? null
+                      : () => _toggleFavorite(selectedEvent),
                   onOpenDetails: () => _openEventDetails(selectedEvent),
                 ),
         ),
@@ -436,6 +522,12 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   void _handleUserMapGesture() {
     if (mounted && _isCenteredOnUser) {
       setState(() => _isCenteredOnUser = false);
+    }
+  }
+
+  void _clearSelectedEvent() {
+    if (mounted && _selectedEventId != null) {
+      setState(() => _selectedEventId = null);
     }
   }
 }

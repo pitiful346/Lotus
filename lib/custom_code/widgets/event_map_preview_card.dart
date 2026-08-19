@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 class EventMapPreviewCard extends StatelessWidget {
@@ -10,15 +11,21 @@ class EventMapPreviewCard extends StatelessWidget {
     required this.onOpenDetails,
     this.distanceMeters,
     this.isOpening = false,
+    this.isFavorite = false,
+    this.isUpdatingFavorite = false,
+    this.onToggleFavorite,
     this.bottomInset = 16,
   });
 
   final Event event;
   final double? distanceMeters;
   final bool isOpening;
+  final bool isFavorite;
+  final bool isUpdatingFavorite;
   final double bottomInset;
   final VoidCallback onClose;
   final VoidCallback onOpenDetails;
+  final VoidCallback? onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +37,11 @@ class EventMapPreviewCard extends StatelessWidget {
     );
     final category = event.categories.first.label;
     final additionalCategories = event.categories.length - 1;
+    final venue = event.location.venueName ?? event.location.displayName;
+    final distanceAndPrice = [
+      formatEventDistance(distanceMeters),
+      formatEventPreviewPrice(event.price),
+    ].join(' · ');
 
     return SafeArea(
       minimum: EdgeInsets.fromLTRB(16, 16, 16, bottomInset),
@@ -48,7 +60,7 @@ class EventMapPreviewCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    height: 116,
+                    height: 126,
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -78,6 +90,38 @@ class EventMapPreviewCard extends StatelessWidget {
                                     width: 32,
                                     height: 32,
                                     child: IconButton(
+                                      tooltip: isFavorite
+                                          ? 'Remover dos favoritos'
+                                          : 'Guardar nos favoritos',
+                                      padding: EdgeInsets.zero,
+                                      onPressed: isUpdatingFavorite
+                                          ? null
+                                          : onToggleFavorite,
+                                      icon: isUpdatingFavorite
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Color(0xFFB7F34A),
+                                              ),
+                                            )
+                                          : Icon(
+                                              isFavorite
+                                                  ? Icons.favorite_rounded
+                                                  : Icons
+                                                        .favorite_border_rounded,
+                                              size: 20,
+                                              color: isFavorite
+                                                  ? const Color(0xFFB7F34A)
+                                                  : const Color(0xFF94A3B8),
+                                            ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: IconButton(
                                       tooltip: 'Fechar',
                                       padding: EdgeInsets.zero,
                                       onPressed: onClose,
@@ -97,8 +141,13 @@ class EventMapPreviewCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 6),
                               _PreviewMetadata(
+                                icon: Icons.location_on_outlined,
+                                label: venue,
+                              ),
+                              const SizedBox(height: 6),
+                              _PreviewMetadata(
                                 icon: Icons.near_me_outlined,
-                                label: formatEventDistance(distanceMeters),
+                                label: distanceAndPrice,
                               ),
                             ],
                           ),
@@ -161,7 +210,7 @@ class EventMapPreviewCard extends StatelessWidget {
                                 ),
                               )
                             : const Icon(Icons.arrow_forward, size: 16),
-                        label: const Text('Ver detalhes'),
+                        label: const Text('Ver evento'),
                       ),
                     ],
                   ),
@@ -272,4 +321,23 @@ String formatEventDistance(double? distanceMeters) {
   }
   final kilometers = (distanceMeters / 1000).toStringAsFixed(1);
   return '${kilometers.replaceAll('.', ',')} km de distância';
+}
+
+String formatEventPreviewPrice(EventPrice price) {
+  final minimum = price.minimumMinorUnits;
+  if (minimum == null) return 'Preço não indicado';
+  if (price.isFree) return 'Grátis';
+
+  final formatter = NumberFormat.currency(
+    locale: 'pt_PT',
+    name: price.currencyCode,
+    symbol: price.currencyCode == 'EUR' ? '€' : price.currencyCode,
+    decimalDigits: minimum % 100 == 0 ? 0 : 2,
+  );
+  final formattedMinimum = formatter.format(minimum / 100);
+  final maximum = price.maximumMinorUnits;
+  if (maximum == null || maximum == minimum) {
+    return 'Desde $formattedMinimum';
+  }
+  return '$formattedMinimum–${formatter.format(maximum / 100)}';
 }

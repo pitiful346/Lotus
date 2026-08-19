@@ -6,8 +6,10 @@ bool get isLotusHomeMapSupported => false;
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
+  required VoidCallback onMapTapEmpty,
   required ValueChanged<MapViewportBounds> onViewportChanged,
   required VoidCallback onUserMapGesture,
+  required String? selectedEventId,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
   required GeoCoordinates initialCenter,

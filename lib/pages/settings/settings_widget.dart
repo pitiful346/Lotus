@@ -77,12 +77,10 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                         color: FlutterFlowTheme.of(context).primaryText,
                         size: 24.0,
                       ),
-                      onPressed: () {
-                        print('IconButton pressed ...');
-                      },
+                          onPressed: context.safePop,
                     ),
                     Text(
-                      'Settings',
+                      'Definições',
                       style: FlutterFlowTheme.of(context).titleLarge.override(
                             font: GoogleFonts.poppins(
                               fontWeight: FlutterFlowTheme.of(context)
@@ -132,7 +130,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                   .spacing
                                   .sm),
                           child: Text(
-                            'Account',
+                            'Conta',
                             style: FlutterFlowTheme.of(context)
                                 .labelMedium
                                 .override(
@@ -254,7 +252,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  'Edit Profile',
+                                                  'Editar perfil',
                                                   style: FlutterFlowTheme.of(
                                                           context)
                                                       .labelLarge
@@ -290,7 +288,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                       ),
                                                 ),
                                                 Text(
-                                                  'Change your photo and info',
+                                                  'Altera a fotografia e os teus dados',
                                                   maxLines: 1,
                                                   style: FlutterFlowTheme.of(
                                                           context)
@@ -404,7 +402,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Security & Password',
+                                                'Segurança e palavra-passe',
                                                 style: FlutterFlowTheme.of(
                                                         context)
                                                     .labelLarge
@@ -439,7 +437,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                     ),
                                               ),
                                               Text(
-                                                'Update your protection',
+                                                'Atualiza a proteção da conta',
                                                 maxLines: 1,
                                                 style: FlutterFlowTheme.of(
                                                         context)
@@ -551,7 +549,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Linked Accounts',
+                                                'Contas associadas',
                                                 style: FlutterFlowTheme.of(
                                                         context)
                                                     .labelLarge
@@ -586,7 +584,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                     ),
                                               ),
                                               Text(
-                                                'Manage connected social apps',
+                                                'Gere as aplicações associadas',
                                                 maxLines: 1,
                                                 style: FlutterFlowTheme.of(
                                                         context)
@@ -668,7 +666,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                   .spacing
                                   .sm),
                           child: Text(
-                            'Notifications',
+                            'Notificações',
                             style: FlutterFlowTheme.of(context)
                                 .labelMedium
                                 .override(
@@ -732,7 +730,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           size: 20.0,
                                         ),
                                         Text(
-                                          'Push Notifications',
+                                          'Notificações push',
                                           style: FlutterFlowTheme.of(context)
                                               .labelLarge
                                               .override(
@@ -829,7 +827,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           size: 20.0,
                                         ),
                                         Text(
-                                          'Email Alerts',
+                                          'Alertas por email',
                                           style: FlutterFlowTheme.of(context)
                                               .labelLarge
                                               .override(
@@ -926,7 +924,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           size: 20.0,
                                         ),
                                         Text(
-                                          'Event Reminders',
+                                          'Lembretes de eventos',
                                           style: FlutterFlowTheme.of(context)
                                               .labelLarge
                                               .override(
@@ -1030,7 +1028,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                   .spacing
                                   .sm),
                           child: Text(
-                            'App Preferences',
+                            'Preferências da aplicação',
                             style: FlutterFlowTheme.of(context)
                                 .labelMedium
                                 .override(
@@ -1094,7 +1092,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           size: 20.0,
                                         ),
                                         Text(
-                                          'Dark Mode',
+                                          'Modo escuro',
                                           style: FlutterFlowTheme.of(context)
                                               .labelLarge
                                               .override(
@@ -1191,7 +1189,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           size: 20.0,
                                         ),
                                         Text(
-                                          'Language',
+                                          'Idioma',
                                           style: FlutterFlowTheme.of(context)
                                               .labelLarge
                                               .override(
@@ -1235,7 +1233,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           CrossAxisAlignment.center,
                                       children: [
                                         Text(
-                                          'English',
+                                          'Português',
                                           style: FlutterFlowTheme.of(context)
                                               .bodyMedium
                                               .override(
@@ -1302,7 +1300,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           size: 20.0,
                                         ),
                                         Text(
-                                          'Distance Units',
+                                          'Unidades de distância',
                                           style: FlutterFlowTheme.of(context)
                                               .labelLarge
                                               .override(
@@ -1346,7 +1344,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                           CrossAxisAlignment.center,
                                       children: [
                                         Text(
-                                          'Miles',
+                                          'Quilómetros',
                                           style: FlutterFlowTheme.of(context)
                                               .bodyMedium
                                               .override(
@@ -1419,7 +1417,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                   .spacing
                                   .sm),
                           child: Text(
-                            'Support & Legal',
+                            'Ajuda e informação legal',
                             style: FlutterFlowTheme.of(context)
                                 .labelMedium
                                 .override(
@@ -1528,7 +1526,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Help Center',
+                                                'Centro de ajuda',
                                                 style: FlutterFlowTheme.of(
                                                         context)
                                                     .labelLarge
@@ -1563,7 +1561,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                     ),
                                               ),
                                               Text(
-                                                'FAQs and support chat',
+                                                'Perguntas frequentes e apoio',
                                                 maxLines: 1,
                                                 style: FlutterFlowTheme.of(
                                                         context)
@@ -1675,7 +1673,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Privacy Policy',
+                                                'Política de privacidade',
                                                 style: FlutterFlowTheme.of(
                                                         context)
                                                     .labelLarge
@@ -1710,7 +1708,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                     ),
                                               ),
                                               Text(
-                                                'How we handle your data',
+                                                'Como tratamos os teus dados',
                                                 maxLines: 1,
                                                 style: FlutterFlowTheme.of(
                                                         context)
@@ -1822,7 +1820,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'Terms of Service',
+                                                'Termos de utilização',
                                                 style: FlutterFlowTheme.of(
                                                         context)
                                                     .labelLarge
@@ -1857,7 +1855,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                     ),
                                               ),
                                               Text(
-                                                'Our usage agreement',
+                                                'Acordo de utilização',
                                                 maxLines: 1,
                                                 style: FlutterFlowTheme.of(
                                                         context)
@@ -1969,7 +1967,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                'About EventPulse',
+                                                'Sobre o Lotus',
                                                 style: FlutterFlowTheme.of(
                                                         context)
                                                     .labelLarge
@@ -2134,7 +2132,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                               size: 16.0,
                                             ),
                                             Text(
-                                              'Log Out',
+                                              'Terminar sessão',
                                               style: FlutterFlowTheme.of(
                                                       context)
                                                   .labelMedium
@@ -2192,7 +2190,7 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                         .spacing
                                         .md),
                                 child: Text(
-                                  'Delete Account',
+                                  'Eliminar conta',
                                   style: FlutterFlowTheme.of(context)
                                       .labelMedium
                                       .override(
