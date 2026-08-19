@@ -39,6 +39,51 @@ void main() {
     await tester.pump();
     expect(find.text('map-content:1').hitTestable(), findsOneWidget);
   });
+
+  testWidgets('main navigation uses the floating dark capsule treatment', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: LotusMainShell(
+          mapTab: _StatefulTab('map-content'),
+          exploreTab: _StatefulTab('explore-content'),
+          favoritesTab: _StatefulTab('favorites-content'),
+          profileTab: _StatefulTab('profile-content'),
+        ),
+      ),
+    );
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.extendBody, isTrue);
+    expect(
+      find.byKey(const Key('lotus-floating-navigation-surface')),
+      findsOne,
+    );
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('lotus-main-navigation')),
+        matching: find.byType(SafeArea),
+      ),
+      findsOneWidget,
+    );
+
+    final navigation = tester.widget<NavigationBar>(
+      find.byKey(const Key('lotus-main-navigation')),
+    );
+    expect(navigation.destinations, hasLength(4));
+    expect(navigation.backgroundColor, Colors.transparent);
+
+    final navigationTheme = tester.widget<NavigationBarTheme>(
+      find.byType(NavigationBarTheme),
+    );
+    final selectedIcon = navigationTheme.data.iconTheme!.resolve({
+      WidgetState.selected,
+    });
+    final inactiveIcon = navigationTheme.data.iconTheme!.resolve({});
+    expect(selectedIcon!.color, const Color(0xFFB7F34A));
+    expect(inactiveIcon!.color, const Color(0xFFC2CCD8));
+  });
 }
 
 class _StatefulTab extends StatefulWidget {

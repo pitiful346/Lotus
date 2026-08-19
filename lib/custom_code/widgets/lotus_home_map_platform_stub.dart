@@ -7,6 +7,7 @@ Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
   required ValueChanged<MapViewportBounds> onViewportChanged,
+  required VoidCallback onUserMapGesture,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
   required GeoCoordinates initialCenter,

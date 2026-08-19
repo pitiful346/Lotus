@@ -10,11 +10,13 @@ class EventMapPreviewCard extends StatelessWidget {
     required this.onOpenDetails,
     this.distanceMeters,
     this.isOpening = false,
+    this.bottomInset = 16,
   });
 
   final Event event;
   final double? distanceMeters;
   final bool isOpening;
+  final double bottomInset;
   final VoidCallback onClose;
   final VoidCallback onOpenDetails;
 
@@ -30,7 +32,7 @@ class EventMapPreviewCard extends StatelessWidget {
     final additionalCategories = event.categories.length - 1;
 
     return SafeArea(
-      minimum: const EdgeInsets.all(16),
+      minimum: EdgeInsets.fromLTRB(16, 16, 16, bottomInset),
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ConstrainedBox(
@@ -251,10 +253,7 @@ class _PreviewMetadata extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFFCBD5E1),
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
           ),
         ),
       ],

@@ -27,6 +27,7 @@ class LotusMainShell extends StatefulWidget {
 }
 
 class _LotusMainShellState extends State<LotusMainShell> {
+  static const _navigationClearance = 108.0;
   int _selectedIndex = 0;
   late final List<Widget?> _tabs;
 
@@ -40,42 +41,106 @@ class _LotusMainShellState extends State<LotusMainShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF080B10),
+      extendBody: true,
       body: IndexedStack(
         index: _selectedIndex,
-        children: List.generate(
-          4,
-          (index) => _tabs[index] ?? const SizedBox.shrink(),
-        ),
+        children: List.generate(4, (index) {
+          final tab = _tabs[index] ?? const SizedBox.shrink();
+          return index == 0
+              ? tab
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: _navigationClearance),
+                  child: tab,
+                );
+        }),
       ),
-      bottomNavigationBar: NavigationBar(
-        key: const Key('lotus-main-navigation'),
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _selectTab,
-        backgroundColor: const Color(0xFF151B23),
-        indicatorColor: lotusQualityAccent.withValues(alpha: 0.16),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map_rounded),
-            label: 'Mapa',
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: DecoratedBox(
+          key: const Key('lotus-floating-navigation-surface'),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66000000),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore_rounded),
-            label: 'Explorar',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xF2161C24),
+                border: Border.all(color: const Color(0x292F3A48)),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: NavigationBarTheme(
+                data: NavigationBarThemeData(
+                  height: 68,
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  indicatorColor: lotusQualityAccent.withValues(alpha: 0.18),
+                  indicatorShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  iconTheme: WidgetStateProperty.resolveWith((states) {
+                    return IconThemeData(
+                      color: states.contains(WidgetState.selected)
+                          ? lotusQualityAccent
+                          : const Color(0xFFC2CCD8),
+                      size: states.contains(WidgetState.selected) ? 25 : 23,
+                    );
+                  }),
+                  labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                    return TextStyle(
+                      color: states.contains(WidgetState.selected)
+                          ? lotusQualityAccent
+                          : const Color(0xFFC2CCD8),
+                      fontSize: 12,
+                      fontWeight: states.contains(WidgetState.selected)
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    );
+                  }),
+                ),
+                child: NavigationBar(
+                  key: const Key('lotus-main-navigation'),
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _selectTab,
+                  animationDuration: const Duration(milliseconds: 180),
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  indicatorColor: lotusQualityAccent.withValues(alpha: 0.18),
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.map_outlined),
+                      selectedIcon: Icon(Icons.map_rounded),
+                      label: 'Mapa',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.explore_outlined),
+                      selectedIcon: Icon(Icons.explore_rounded),
+                      label: 'Explorar',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.favorite_border_rounded),
+                      selectedIcon: Icon(Icons.favorite_rounded),
+                      label: 'Favoritos',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.person_outline_rounded),
+                      selectedIcon: Icon(Icons.person_rounded),
+                      label: 'Perfil',
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.favorite_border_rounded),
-            selectedIcon: Icon(Icons.favorite_rounded),
-            label: 'Favoritos',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: 'Perfil',
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -63,6 +63,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
   String? _selectedEventId;
   String? _openingEventId;
   int _centerOnUserRequest = 0;
+  bool _isCenteredOnUser = false;
 
   @override
   void initState() {
@@ -201,7 +202,10 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
       return;
     }
     if (status == UserLocationStatus.available) {
-      setState(() => _centerOnUserRequest += 1);
+      setState(() {
+        _centerOnUserRequest += 1;
+        _isCenteredOnUser = true;
+      });
       return;
     }
     _showLocationProblem(status);
@@ -371,6 +375,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             events: visibleEvents,
             onEventTap: (eventId) => _selectEvent(eventId, eventsById),
             onViewportChanged: _handleViewportChanged,
+            onUserMapGesture: _handleUserMapGesture,
             userCoordinates: locationState.coordinates,
             centerOnUserRequest: _centerOnUserRequest,
             initialCenter:
@@ -407,7 +412,8 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         if (_supportsLocation)
           _CenterOnUserButton(
             status: locationState.status,
-            bottomInset: selectedEvent == null ? 24 : 218,
+            isActive: _isCenteredOnUser,
+            bottomInset: selectedEvent == null ? 108 : 310,
             onPressed: _centerOnUser,
           ),
         LotusAnimatedSwap(
@@ -418,12 +424,19 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
                   event: selectedEvent,
                   distanceMeters: _distanceTo(selectedEvent),
                   isOpening: _openingEventId == selectedEvent.id,
+                  bottomInset: 108,
                   onClose: () => setState(() => _selectedEventId = null),
                   onOpenDetails: () => _openEventDetails(selectedEvent),
                 ),
         ),
       ],
     );
+  }
+
+  void _handleUserMapGesture() {
+    if (mounted && _isCenteredOnUser) {
+      setState(() => _isCenteredOnUser = false);
+    }
   }
 }
 
@@ -555,11 +568,13 @@ class _SearchThisAreaButton extends StatelessWidget {
 class _CenterOnUserButton extends StatelessWidget {
   const _CenterOnUserButton({
     required this.status,
+    required this.isActive,
     required this.bottomInset,
     required this.onPressed,
   });
 
   final UserLocationStatus status;
+  final bool isActive;
   final double bottomInset;
   final VoidCallback onPressed;
 
@@ -578,8 +593,12 @@ class _CenterOnUserButton extends StatelessWidget {
           heroTag: null,
           tooltip: 'Centrar em mim',
           onPressed: isLoading ? null : onPressed,
-          backgroundColor: const Color(0xF21B2029),
-          foregroundColor: const Color(0xFFB7F34A),
+          backgroundColor: isActive
+              ? lotusQualityAccent
+              : const Color(0xF21B2029),
+          foregroundColor: isActive
+              ? const Color(0xFF11161D)
+              : const Color(0xFFD5DEE9),
           disabledElevation: 2,
           child: isLoading
               ? const SizedBox(
@@ -587,7 +606,7 @@ class _CenterOnUserButton extends StatelessWidget {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Color(0xFFB7F34A),
+                    color: lotusQualityAccent,
                   ),
                 )
               : Icon(
@@ -692,7 +711,7 @@ class _NoEventsInArea extends StatelessWidget {
     return Align(
       alignment: Alignment.bottomCenter,
       child: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(24, 24, 24, 88),
+        minimum: const EdgeInsets.fromLTRB(24, 24, 24, 116),
         child: Material(
           color: const Color(0xF21B2029),
           borderRadius: BorderRadius.circular(16),

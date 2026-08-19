@@ -16,12 +16,15 @@ const _regularPinImageId = 'lotus-event-pin';
 const _featuredPinImageId = 'lotus-featured-event-pin';
 const _pinWidth = 88;
 const _pinHeight = 104;
+const _initialZoom = 13.5;
+const _explorationPitch = 42.0;
 bool get isLotusHomeMapSupported => Platform.isAndroid || Platform.isIOS;
 
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
   required ValueChanged<MapViewportBounds> onViewportChanged,
+  required VoidCallback onUserMapGesture,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
   required GeoCoordinates initialCenter,
@@ -38,6 +41,7 @@ Widget buildLotusHomeMap({
     events: events,
     onEventTap: onEventTap,
     onViewportChanged: onViewportChanged,
+    onUserMapGesture: onUserMapGesture,
     userCoordinates: userCoordinates,
     centerOnUserRequest: centerOnUserRequest,
     initialCenter: initialCenter,
@@ -49,6 +53,7 @@ class _NativeLotusHomeMap extends StatefulWidget {
     required this.events,
     required this.onEventTap,
     required this.onViewportChanged,
+    required this.onUserMapGesture,
     required this.userCoordinates,
     required this.centerOnUserRequest,
     required this.initialCenter,
@@ -57,6 +62,7 @@ class _NativeLotusHomeMap extends StatefulWidget {
   final List<Event> events;
   final ValueChanged<String> onEventTap;
   final ValueChanged<MapViewportBounds> onViewportChanged;
+  final VoidCallback onUserMapGesture;
   final GeoCoordinates? userCoordinates;
   final int centerOnUserRequest;
   final GeoCoordinates initialCenter;
@@ -319,6 +325,11 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       'lightPreset',
       'night',
     );
+    await mapboxMap.style.setStyleImportConfigProperty(
+      'basemap',
+      'show3dObjects',
+      true,
+    );
   }
 
   Future<void> _updateUserLocationSettings() async {
@@ -352,7 +363,7 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
         ),
         zoom: 15.5,
         bearing: 0,
-        pitch: 0,
+        pitch: _explorationPitch,
       ),
       MapAnimationOptions(duration: 900, startDelay: 0),
     );
@@ -370,14 +381,16 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
             widget.initialCenter.latitude,
           ),
         ),
-        zoom: 12.5,
+        zoom: _initialZoom,
         bearing: 0,
-        pitch: 0,
+        pitch: _explorationPitch,
       ),
       textureView: true,
       onMapCreated: _onMapCreated,
       onStyleLoadedListener: (_) => _onStyleLoaded(),
       onMapIdleListener: (_) => _reportViewport(),
+      onScrollListener: (_) => widget.onUserMapGesture(),
+      onZoomListener: (_) => widget.onUserMapGesture(),
       // The SDK keeps this callback for compatibility while typed layer
       // interactions mature; querying only Lotus layers keeps the hit test
       // narrow and deterministic.
@@ -504,7 +517,10 @@ Future<Uint8List> _renderPinImage({required bool isFeatured}) async {
 
   final picture = recorder.endRecording();
   final image = await picture.toImage(width.toInt(), height.toInt());
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  // The native Mapbox bridges decode this payload as an encoded platform
+  // image (UIImage/Bitmap), so provide PNG bytes rather than Flutter's raw
+  // pixel buffer.
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
   image.dispose();
   picture.dispose();
   if (bytes == null) {

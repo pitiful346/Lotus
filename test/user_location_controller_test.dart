@@ -43,12 +43,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      final normalButton = tester.widget<FloatingActionButton>(
+        find.byKey(const Key('center-on-user')),
+      );
+      expect(normalButton.backgroundColor, const Color(0xF21B2029));
+
       await tester.tap(find.byKey(const Key('center-on-user')));
       await tester.pumpAndSettle();
 
       expect(gateway.requestPermissionCalls, 1);
       expect(controller.state.status, UserLocationStatus.available);
       expect(controller.state.coordinates?.latitude, 41.14961);
+      final activeButton = tester.widget<FloatingActionButton>(
+        find.byKey(const Key('center-on-user')),
+      );
+      expect(activeButton.backgroundColor, const Color(0xFFB7F34A));
+      expect(activeButton.foregroundColor, const Color(0xFF11161D));
     },
   );
 
