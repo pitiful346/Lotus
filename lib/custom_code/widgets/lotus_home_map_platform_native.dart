@@ -98,24 +98,26 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   bool _isSyncingEvents = false;
   bool _isReportingViewport = false;
   int _eventSyncVersion = 0;
-  late final CameraViewportState _initialViewport;
+  CameraViewportState? _cachedInitialViewport;
+
+  CameraViewportState get _initialViewport =>
+      _cachedInitialViewport ??= CameraViewportState(
+        center: Point(
+          coordinates: Position(
+            widget.initialCenter.longitude,
+            widget.initialCenter.latitude,
+          ),
+        ),
+        zoom: _initialZoom,
+        bearing: 0,
+        pitch: _explorationPitch,
+      );
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     MapboxOptions.setAccessToken(_mapboxAccessToken);
-    _initialViewport = CameraViewportState(
-      center: Point(
-        coordinates: Position(
-          widget.initialCenter.longitude,
-          widget.initialCenter.latitude,
-        ),
-      ),
-      zoom: _initialZoom,
-      bearing: 0,
-      pitch: _explorationPitch,
-    );
   }
 
   @override
