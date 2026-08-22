@@ -9,13 +9,16 @@ import 'package:rxdart/rxdart.dart';
 /// card widgets have been migrated.
 final class FirestoreFavoriteRepository implements FavoriteRepository {
   FirestoreFavoriteRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _customFirestore = firestore;
 
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _customFirestore;
+  FirebaseFirestore get _firestore =>
+      _customFirestore ?? FirebaseFirestore.instance;
 
   @override
   Stream<Set<String>> watchFavoriteEventIds(String userId) {
-    final user = _userReference(userId);
+    final normalizedUserId = _validateUserId(userId);
+    final user = _firestore.collection('users').doc(normalizedUserId);
     return Rx.combineLatest2(
       user.collection('favorites').snapshots(),
       user.snapshots(),
@@ -47,8 +50,10 @@ final class FirestoreFavoriteRepository implements FavoriteRepository {
     required String userId,
     required String eventId,
   }) {
-    final user = _userReference(userId);
-    final event = _eventReference(eventId);
+    final normalizedUserId = _validateUserId(userId);
+    final normalizedEventId = _validateEventId(eventId);
+    final user = _firestore.collection('users').doc(normalizedUserId);
+    final event = _firestore.collection('events').doc(normalizedEventId);
     final favorite = user.collection('favorites').doc(event.id);
 
     return Rx.combineLatest2(favorite.snapshots(), user.snapshots(), (
@@ -73,8 +78,10 @@ final class FirestoreFavoriteRepository implements FavoriteRepository {
     required String eventId,
     required bool isFavorite,
   }) async {
-    final user = _userReference(userId);
-    final event = _eventReference(eventId);
+    final normalizedUserId = _validateUserId(userId);
+    final normalizedEventId = _validateEventId(eventId);
+    final user = _firestore.collection('users').doc(normalizedUserId);
+    final event = _firestore.collection('events').doc(normalizedEventId);
     final favorite = user.collection('favorites').doc(event.id);
 
     await _firestore.runTransaction((transaction) async {
@@ -97,15 +104,15 @@ final class FirestoreFavoriteRepository implements FavoriteRepository {
     });
   }
 
-  DocumentReference<Map<String, dynamic>> _userReference(String userId) {
+  static String _validateUserId(String userId) {
     final normalized = userId.trim();
     if (normalized.isEmpty || normalized.contains('/')) {
       throw ArgumentError.value(userId, 'userId', 'Must be a document ID.');
     }
-    return _firestore.collection('users').doc(normalized);
+    return normalized;
   }
 
-  DocumentReference<Map<String, dynamic>> _eventReference(String eventId) {
+  static String _validateEventId(String eventId) {
     final normalized = eventId.trim();
     if (normalized.isEmpty) {
       throw ArgumentError.value(eventId, 'eventId', 'Must not be empty.');
@@ -123,7 +130,7 @@ final class FirestoreFavoriteRepository implements FavoriteRepository {
         'Must be an event document ID or events/<id> path.',
       );
     }
-    return _firestore.collection('events').doc(documentId);
+    return documentId;
   }
 }
 

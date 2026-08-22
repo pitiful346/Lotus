@@ -6,6 +6,7 @@ import '/custom_code/event_mapping/firestore_organizer_repository.dart';
 import '/custom_code/event_mapping/firestore_personalization_repository.dart';
 import '/custom_code/product_quality/lotus_product_quality.dart';
 import '/custom_code/widgets/event_details_content.dart';
+import '/custom_code/widgets/lotus_event_navigation.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
@@ -127,6 +128,13 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
               onOpenTickets: event.hasTickets
                   ? () => _openTickets(event)
                   : null,
+              onTapOrganizer: (organizer != null || record.organizerId != null)
+                  ? () => openLotusPromoterProfile(
+                        context,
+                        organizer: organizer,
+                        organizerReference: record.organizerId,
+                      )
+                  : null,
             );
           },
         );
@@ -172,17 +180,28 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
   Future<void> _shareEvent(Event event) async {
     unawaited(LotusProductFeedback.selection());
     final localStart = event.startsAt.toLocal();
-    final localizations = MaterialLocalizations.of(context);
-    final date = localizations.formatFullDate(localStart);
-    final time = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(localStart),
-    );
+    final dateFormatted =
+        DateFormat("EEEE, d 'de' MMMM · HH:mm", 'pt_PT').format(localStart);
+    final capitalizedDate = dateFormatted.isNotEmpty
+        ? '${dateFormatted[0].toUpperCase()}${dateFormatted.substring(1)}'
+        : dateFormatted;
+
     final ticketUri = _ticketUri(event);
+    final docId = event.id.contains('/') ? event.id.split('/').last : event.id;
+    final shareUrl = 'https://lotus.app/e/$docId';
     final message = [
       event.title,
-      '$date · $time',
-      event.location.displayName,
-      if (ticketUri != null) ticketUri.toString(),
+      capitalizedDate,
+      if (event.location.displayName.isNotEmpty &&
+          event.location.displayName != 'Localização não indicada')
+        event.location.displayName,
+      '',
+      'Vê todos os detalhes no Lotus:',
+      shareUrl,
+      if (ticketUri != null && ticketUri.toString() != shareUrl) ...[
+        '',
+        'Bilhetes: ${ticketUri.toString()}',
+      ],
     ].join('\n');
     final renderObject = context.findRenderObject();
     final origin = renderObject is RenderBox
@@ -207,10 +226,11 @@ class _EventDetailsWidgetState extends State<EventDetailsWidget> {
     if (coordinates == null) {
       return;
     }
-    final uri = Uri.https('www.google.com', '/maps/search/', {
-      'api': '1',
-      'query': '${coordinates.latitude},${coordinates.longitude}',
-    });
+    final lat = coordinates.latitude;
+    final lng = coordinates.longitude;
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+    );
     final opened = await _launchExternal(
       uri,
       'Não foi possível abrir as direções.',

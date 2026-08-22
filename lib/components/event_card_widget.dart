@@ -1,5 +1,6 @@
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/backend.dart';
+import '/custom_code/event_mapping/firestore_favorite_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -103,32 +104,19 @@ class _EventCardWidgetState extends State<EventCardWidget> {
                                   hoverColor: Colors.transparent,
                                   highlightColor: Colors.transparent,
                                   onTap: () async {
-                                    if ((currentUserDocument?.favoritos
+                                    final doc = widget.dadosDoEvento;
+                                    if (doc == null || currentUserUid.isEmpty)
+                                      return;
+                                    final isFav = (currentUserDocument?.favoritos
                                                 .toList() ??
                                             [])
-                                        .contains(
-                                            widget.dadosDoEvento?.reference)) {
-                                      await currentUserReference!.update({
-                                        ...mapToFirestore(
-                                          {
-                                            'favoritos':
-                                                FieldValue.arrayRemove([
-                                              widget.dadosDoEvento?.reference
-                                            ]),
-                                          },
-                                        ),
-                                      });
-                                    } else {
-                                      await currentUserReference!.update({
-                                        ...mapToFirestore(
-                                          {
-                                            'favoritos': FieldValue.arrayUnion([
-                                              widget.dadosDoEvento?.reference
-                                            ]),
-                                          },
-                                        ),
-                                      });
-                                    }
+                                        .contains(doc.reference);
+                                    await FirestoreFavoriteRepository()
+                                        .setFavorite(
+                                      userId: currentUserUid,
+                                      eventId: doc.reference.path,
+                                      isFavorite: !isFav,
+                                    );
                                   },
                                   child: Icon(
                                     Icons.favorite_border,

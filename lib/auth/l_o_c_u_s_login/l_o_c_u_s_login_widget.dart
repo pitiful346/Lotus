@@ -27,8 +27,7 @@ class _LOCUSLoginWidgetState extends State<LOCUSLoginWidget> {
     super.initState();
     _model = createModel(context, () => LOCUSLoginModel());
 
-    _model.inputContactoTextController ??=
-        TextEditingController(text: 'Enter phone number or email');
+    _model.inputContactoTextController ??= TextEditingController();
     _model.inputContactoFocusNode ??= FocusNode();
 
     authManager.handlePhoneAuthStateChanges(context);
@@ -65,7 +64,7 @@ class _LOCUSLoginWidgetState extends State<LOCUSLoginWidget> {
                   child: Align(
                     alignment: AlignmentDirectional(-1.0, -1.0),
                     child: Text(
-                      'Locus',
+                      'Lotus',
                       style:
                           FlutterFlowTheme.of(context).headlineLarge.override(
                                 font: GoogleFonts.poppins(
@@ -146,7 +145,7 @@ class _LOCUSLoginWidgetState extends State<LOCUSLoginWidget> {
                                       .labelMedium
                                       .fontStyle,
                                 ),
-                        hintText: 'TextField',
+                        hintText: 'Enter phone number or email',
                         hintStyle:
                             FlutterFlowTheme.of(context).labelMedium.override(
                                   font: GoogleFonts.poppins(

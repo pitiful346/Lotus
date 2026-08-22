@@ -13,9 +13,12 @@ final class FirestoreNotificationPreferencesRepository
     return _document(userId).snapshots().map((snapshot) {
       final data = snapshot.data();
       return NotificationPreferences(
-        favoriteEventUpdates: data?['favorite_event_updates'] == true,
+        followedPromoters: data?['followed_promoters'] ?? true,
+        radarReveals: data?['radar_reveals'] ?? true,
+        favoriteEventUpdates: data?['favorite_event_updates'] ?? true,
         upcomingFavoriteEvents: data?['upcoming_favorite_events'] == true,
         recommendations: data?['recommendations'] == true,
+        marketing: data?['marketing'] == true,
       );
     });
   }
@@ -26,9 +29,12 @@ final class FirestoreNotificationPreferencesRepository
     required NotificationPreferences preferences,
   }) {
     return _document(userId).set({
+      'followed_promoters': preferences.followedPromoters,
+      'radar_reveals': preferences.radarReveals,
       'favorite_event_updates': preferences.favoriteEventUpdates,
       'upcoming_favorite_events': preferences.upcomingFavoriteEvents,
       'recommendations': preferences.recommendations,
+      'marketing': preferences.marketing,
       'quiet_hours_start': preferences.quietHoursStart,
       'quiet_hours_end': preferences.quietHoursEnd,
       'max_per_day': preferences.maxPerDay,

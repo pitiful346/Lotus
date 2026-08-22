@@ -102,6 +102,35 @@ service cloud.firestore {
         data.organizer_id == organizerReference(request.auth.uid);
     }
 
+    function validTeaser(data) {
+      return data.keys().hasAll([
+          'description', 'organizer_id', 'reveal_at', 'status', 'created_at'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'description', 'image', 'organizer_id', 'categoria',
+          'city', 'approximate_date', 'reveal_at', 'status', 'target_event_id',
+          'trackers_count', 'created_at', 'updated_at'
+        ]) &&
+        data.description is string && data.description.size() > 0 && data.description.size() <= 5000 &&
+        data.organizer_id is path &&
+        data.reveal_at is timestamp &&
+        data.status is string && data.status in ['DRAFT', 'PUBLISHED', 'TEASER_ACTIVE', 'REVEALED', 'EXPIRED', 'CANCELLED'] &&
+        data.created_at is timestamp &&
+        optionalString(data, 'title', 160) &&
+        optionalString(data, 'image', 2048) &&
+        optionalString(data, 'city', 100) &&
+        optionalString(data, 'approximate_date', 100) &&
+        optionalString(data, 'target_event_id', 160) &&
+        (!('trackers_count' in data) || (data.trackers_count is int && data.trackers_count >= 0)) &&
+        (!('updated_at' in data) || data.updated_at is timestamp) &&
+        (!('categoria' in data) || (data.categoria is list && data.categoria.size() <= 10));
+    }
+
+    function ownsTeaser(data) {
+      return isOrganizer() &&
+        data.organizer_id == organizerReference(request.auth.uid);
+    }
+
     function validPreferences(data) {
       return data.keys().hasAll(['interest_ids', 'updated_at']) &&
         data.keys().hasOnly(['interest_ids', 'updated_at']) &&
@@ -134,15 +163,19 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'favorite_event_updates', 'upcoming_favorite_events',
-          'recommendations', 'quiet_hours_start', 'quiet_hours_end',
+          'recommendations', 'followed_promoters', 'radar_reveals', 'marketing',
+          'quiet_hours_start', 'quiet_hours_end',
           'max_per_day', 'updated_at'
         ]) &&
         data.favorite_event_updates is bool &&
         data.upcoming_favorite_events is bool &&
         data.recommendations is bool &&
+        (!('followed_promoters' in data) || data.followed_promoters is bool) &&
+        (!('radar_reveals' in data) || data.radar_reveals is bool) &&
+        (!('marketing' in data) || data.marketing is bool) &&
         data.quiet_hours_start == 22 &&
         data.quiet_hours_end == 8 &&
-        data.max_per_day == 3 &&
+        data.max_per_day >= 1 && data.max_per_day <= 5 &&
         data.updated_at == request.time;
     }
 
@@ -219,6 +252,38 @@ service cloud.firestore {
             request.resource.data.created_time == resource.data.created_time &&
             request.resource.data.is_verified == resource.data.is_verified));
       allow delete: if isAdmin();
+
+      match /followers/{followerId} {
+        allow read: if true;
+        allow create: if owns(followerId) &&
+          request.resource.data.keys().hasOnly(['user_ref', 'user_id', 'created_at']) &&
+          request.resource.data.user_id == followerId &&
+          request.resource.data.created_at == request.time;
+        allow update: if false;
+        allow delete: if owns(followerId) || isAdmin();
+      }
+    }
+
+    match /teasers/{teaserId} {
+      allow read: if resource.data.status in ['PUBLISHED', 'TEASER_ACTIVE', 'REVEALED'] ||
+        (signedIn() && (isAdmin() || ownsTeaser(resource.data)));
+      allow create: if validTeaser(request.resource.data) &&
+        (isAdmin() || ownsTeaser(request.resource.data));
+      allow update: if validTeaser(request.resource.data) &&
+        (isAdmin() || (ownsTeaser(resource.data) &&
+          request.resource.data.organizer_id == resource.data.organizer_id &&
+          request.resource.data.created_at == resource.data.created_at));
+      allow delete: if isAdmin();
+
+      match /trackers/{trackerId} {
+        allow read: if true;
+        allow create: if owns(trackerId) &&
+          request.resource.data.keys().hasOnly(['user_ref', 'user_id', 'created_at']) &&
+          request.resource.data.user_id == trackerId &&
+          request.resource.data.created_at == request.time;
+        allow update: if false;
+        allow delete: if owns(trackerId) || isAdmin();
+      }
     }
 
     match /users/{userId} {
@@ -255,7 +320,10 @@ service cloud.firestore {
 
       match /notifications/{notificationId} {
         allow read: if owns(userId) || isAdmin();
-        allow write: if false;
+        allow update: if (owns(userId) || isAdmin()) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'read_at']) &&
+          request.resource.data.status in ['READ', 'UNREAD'];
+        allow create, delete: if isAdmin();
       }
 
       match /notification_delivery/{dayId} {
@@ -294,6 +362,40 @@ service cloud.firestore {
           request.resource.data.event_ref ==
             /databases/$(database)/documents/events/$(eventId) &&
           request.resource.data.event_id == eventId &&
+          request.resource.data.created_at == request.time;
+        allow update: if false;
+        allow delete: if owns(userId) || isAdmin();
+      }
+
+      match /following_organizers/{organizerId} {
+        allow read: if owns(userId) || isAdmin();
+        allow create: if owns(userId) &&
+          request.resource.data.keys().hasOnly([
+            'organizer_ref', 'organizer_id', 'created_at'
+          ]) &&
+          request.resource.data.organizer_id == organizerId &&
+          request.resource.data.created_at == request.time;
+        allow update: if false;
+        allow delete: if owns(userId) || isAdmin();
+      }
+
+      match /followers/{followerId} {
+        allow read: if true;
+        allow create: if owns(followerId) &&
+          request.resource.data.keys().hasOnly(['user_ref', 'user_id', 'created_at']) &&
+          request.resource.data.user_id == followerId &&
+          request.resource.data.created_at == request.time;
+        allow update: if false;
+        allow delete: if owns(followerId) || isAdmin();
+      }
+
+      match /tracked_teasers/{teaserId} {
+        allow read: if owns(userId) || isAdmin();
+        allow create: if owns(userId) &&
+          request.resource.data.keys().hasOnly([
+            'teaser_ref', 'teaser_id', 'created_at'
+          ]) &&
+          request.resource.data.teaser_id == teaserId &&
           request.resource.data.created_at == request.time;
         allow update: if false;
         allow delete: if owns(userId) || isAdmin();

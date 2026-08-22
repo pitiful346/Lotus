@@ -90,7 +90,7 @@ class _LandingWidgetState extends State<LandingWidget> {
                               Align(
                                 alignment: AlignmentDirectional(-1.0, -1.0),
                                 child: Text(
-                                  'Locus',
+                                  'Lotus',
                                   style: FlutterFlowTheme.of(context)
                                       .headlineLarge
                                       .override(

@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 
+import '/auth/firebase_auth/auth_util.dart';
 import '/custom_code/product_quality/lotus_product_quality.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/pages/search/search_widget.dart';
 import '../event_mapping/firestore_event_search_repository.dart';
+import '../event_mapping/firestore_promoter_follow_repository.dart';
 import '../location/user_location_controller.dart';
 import 'lotus_event_navigation.dart';
 import 'lotus_event_tiles.dart';
@@ -16,11 +18,13 @@ class LotusExploreTab extends StatefulWidget {
     super.key,
     this.repository,
     this.locationController,
+    this.followRepository,
     this.now,
   });
 
   final EventSearchRepository? repository;
   final UserLocationController? locationController;
+  final PromoterFollowRepository? followRepository;
   final DateTime Function()? now;
 
   @override
@@ -29,8 +33,11 @@ class LotusExploreTab extends StatefulWidget {
 
 class _LotusExploreTabState extends State<LotusExploreTab> {
   late EventSearchRepository _repository;
+  late PromoterFollowRepository _followRepository;
   late UserLocationController _locationController;
   late bool _ownsLocationController;
+  StreamSubscription<Set<String>>? _followSubscription;
+  Set<String> _followedOrganizerIds = const {};
   Future<List<Event>>? _events;
   String? _categoryId;
 
@@ -40,15 +47,34 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
   void initState() {
     super.initState();
     _repository = widget.repository ?? FirestoreEventSearchRepository();
+    _followRepository =
+        widget.followRepository ?? FirestorePromoterFollowRepository();
     _events = _repository.loadCorpus(limit: 80);
     _ownsLocationController = widget.locationController == null;
     _locationController = widget.locationController ?? UserLocationController();
     _locationController.addListener(_locationChanged);
     unawaited(_locationController.refresh(requestPermission: false));
+    _subscribeFollowedPromoters();
+  }
+
+  void _subscribeFollowedPromoters() {
+    _followSubscription?.cancel();
+    final uid = currentUserUid;
+    if (uid.isNotEmpty) {
+      _followSubscription = _followRepository
+          .watchFollowedOrganizerIds(uid)
+          .listen(
+            (ids) {
+              if (mounted) setState(() => _followedOrganizerIds = ids);
+            },
+            onError: (_) {},
+          );
+    }
   }
 
   @override
   void dispose() {
+    _followSubscription?.cancel();
     _locationController.removeListener(_locationChanged);
     if (_ownsLocationController) _locationController.dispose();
     super.dispose();
@@ -92,7 +118,20 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
   );
 
   Widget _content(List<Event> events) {
-    final featured = events.where((event) => event.isFeatured).take(8).toList();
+    final validEvents = events
+        .where((event) =>
+            event.status != EventStatus.cancelled &&
+            event.status != EventStatus.archived &&
+            (event.endsAt == null || !event.endsAt!.isBefore(_now)) &&
+            !event.startsAt.isBefore(_now.subtract(const Duration(hours: 12))))
+        .toList();
+
+    var featured =
+        validEvents.where((event) => event.isFeatured).take(8).toList();
+    if (featured.isEmpty && validEvents.isNotEmpty) {
+      final withImage = validEvents.where((e) => e.imageUri != null).toList();
+      featured = (withImage.isNotEmpty ? withImage : validEvents).take(3).toList();
+    }
     final today = events.where(_isToday).take(12).toList();
     final weekend = events.where(_isThisWeekend).take(12).toList();
     final trending = [...events]
@@ -128,6 +167,19 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
               .where((event) => event.categoryIds.contains(_categoryId))
               .take(16)
               .toList();
+
+    final free =
+        validEvents.where((event) => event.isFree).take(12).toList();
+    final followedPromoters = _followedOrganizerIds.isEmpty
+        ? <Event>[]
+        : validEvents
+            .where(
+              (event) =>
+                  event.organizer != null &&
+                  _followedOrganizerIds.contains(event.organizer!.id),
+            )
+            .take(12)
+            .toList();
 
     return RefreshIndicator(
       onRefresh: _reload,
@@ -177,11 +229,18 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
               ),
             ),
           ),
+          const SizedBox(height: 14),
+          _RadarDiscoveryBanner(onTap: () => unawaited(openLotusRadar(context))),
           if (featured.isNotEmpty)
-            _EventSection(
-              title: 'Em destaque',
+            _FeaturedSection(
               events: featured,
-              badge: 'Destaque',
+              onOpen: _open,
+            ),
+          if (followedPromoters.isNotEmpty)
+            _EventSection(
+              title: 'Dos promoters que segues',
+              events: followedPromoters,
+              badge: 'A Seguir',
               onOpen: _open,
             ),
           if (today.isNotEmpty)
@@ -199,6 +258,13 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
                 _locationController.refresh(requestPermission: true),
             onOpen: _open,
           ),
+          if (free.isNotEmpty)
+            _EventSection(
+              title: 'Entrada livre & Gratuitos',
+              events: free,
+              badge: 'Grátis',
+              onOpen: _open,
+            ),
           const SizedBox(height: 26),
           const _SectionTitle('Categorias'),
           const SizedBox(height: 10),
@@ -268,6 +334,47 @@ class _LotusExploreTabState extends State<LotusExploreTab> {
     final monday = saturday.add(const Duration(days: 2));
     final date = event.startsAt.toLocal();
     return !date.isBefore(saturday) && date.isBefore(monday);
+  }
+}
+
+class _FeaturedSection extends StatelessWidget {
+  const _FeaturedSection({
+    required this.events,
+    required this.onOpen,
+  });
+
+  final List<Event> events;
+  final ValueChanged<Event> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    if (events.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('Em destaque'),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 290,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: events.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              itemBuilder: (context, index) {
+                final event = events[index];
+                return LotusFeaturedEventHeroCard(
+                  event: event,
+                  badge: index == 0 ? '⚡ DESTAQUE LOTUS' : 'CURADORIA LOTUS',
+                  onTap: () => onOpen(event),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -399,3 +506,107 @@ class _SectionTitle extends StatelessWidget {
     ),
   );
 }
+
+class _RadarDiscoveryBanner extends StatelessWidget {
+  const _RadarDiscoveryBanner({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: lotusSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: lotusQualityAccent.withValues(alpha: 0.3),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: const Key('explore-radar-banner'),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: lotusQualityAccent.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.radar_rounded,
+                  color: lotusQualityAccent,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'RADAR LOTUS',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        _RadarBadge(),
+                      ],
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Descobre teasers e eventos antes da revelação',
+                      style: TextStyle(
+                        color: lotusQualityMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: lotusQualityAccent,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RadarBadge extends StatelessWidget {
+  const _RadarBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: lotusQualityAccent.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text(
+        'EXCLUSIVO',
+        style: TextStyle(
+          color: lotusQualityAccent,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+

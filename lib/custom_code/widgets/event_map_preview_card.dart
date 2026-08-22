@@ -52,7 +52,10 @@ class EventMapPreviewCard extends StatelessWidget {
           child: Material(
             color: const Color(0xF21B2029),
             elevation: 12,
-            borderRadius: BorderRadius.circular(20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0x33FFFFFF)),
+            ),
             clipBehavior: Clip.antiAlias,
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -277,7 +280,7 @@ class _ImageFallback extends StatelessWidget {
               )
             : const Icon(
                 Icons.image_outlined,
-                color: Color(0xFF76869A),
+                color: Color(0xFF94A3B8),
                 size: 32,
               ),
       ),

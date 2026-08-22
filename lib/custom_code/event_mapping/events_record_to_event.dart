@@ -7,7 +7,9 @@ Stream<List<Event>> watchMapEvents() {
     final events = <Event>[];
     for (final record in records) {
       final event = eventFromRecord(record);
-      if (event != null && event.location.coordinates != null) {
+      if (event != null &&
+          event.location.coordinates != null &&
+          event.status == EventStatus.published) {
         events.add(event);
       }
     }
@@ -18,7 +20,7 @@ Stream<List<Event>> watchMapEvents() {
 
 /// Converts the generated Firestore model at the application boundary.
 ///
-/// Invalid, archived, or undated records are omitted so a single legacy
+/// Invalid, draft, archived, or undated records are omitted so a single legacy
 /// document cannot prevent the remaining event views from rendering. Map
 /// streams additionally omit events without coordinates.
 Event? eventFromRecord(EventsRecord record, {EventOrganizer? organizer}) {
@@ -26,9 +28,23 @@ Event? eventFromRecord(EventsRecord record, {EventOrganizer? organizer}) {
   final startsAt = record.startDate;
   final title = record.name.trim();
 
-  if (record.isArchived || startsAt == null || title.isEmpty) {
+  final rawStatus =
+      (record.snapshotData['status'] as String?)?.trim().toUpperCase();
+  if (record.isArchived ||
+      rawStatus == 'ARCHIVED' ||
+      rawStatus == 'DRAFT' ||
+      rawStatus == 'REJECTED' ||
+      startsAt == null ||
+      title.isEmpty) {
     return null;
   }
+
+  final status = switch (rawStatus) {
+    'CANCELLED' => EventStatus.cancelled,
+    'POSTPONED' => EventStatus.postponed,
+    'COMPLETED' => EventStatus.completed,
+    _ => EventStatus.published,
+  };
 
   try {
     final categoryLabels = record.categoria
@@ -44,6 +60,36 @@ Event? eventFromRecord(EventsRecord record, {EventOrganizer? organizer}) {
       record.venueName,
       'Localização não indicada',
     ]);
+
+    final artistsRaw = record.snapshotData['artists'] ??
+        record.snapshotData['artistas'] ??
+        record.snapshotData['lineup'];
+    final artists = <String>[];
+    if (artistsRaw is List) {
+      for (final item in artistsRaw) {
+        if (item != null) {
+          final s = item.toString().trim();
+          if (s.isNotEmpty) artists.add(s);
+        }
+      }
+    } else if (artistsRaw is String && artistsRaw.trim().isNotEmpty) {
+      artists.addAll(
+        artistsRaw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty),
+      );
+    }
+
+    int? minimumAge;
+    final rawAge = record.snapshotData['min_age'] ??
+        record.snapshotData['idade_minima'] ??
+        record.snapshotData['minimum_age'];
+    if (rawAge is int && rawAge > 0) {
+      minimumAge = rawAge;
+    } else if (rawAge is String && rawAge.trim().isNotEmpty) {
+      final parsed = int.tryParse(rawAge.replaceAll(RegExp(r'[^0-9]'), ''));
+      if (parsed != null && parsed > 0) {
+        minimumAge = parsed;
+      }
+    }
 
     return Event(
       id: record.reference.path,
@@ -71,9 +117,16 @@ Event? eventFromRecord(EventsRecord record, {EventOrganizer? organizer}) {
       price: _priceFromRecord(record),
       organizer: organizer,
       links: _linksFromRecord(record),
-      status: EventStatus.published,
+      status: status,
+      artists: artists,
+      minimumAge: minimumAge,
       ticketAvailability: _ticketAvailability(record.ticketStatus),
-      isFeatured: record.isBoosted,
+      isFeatured: record.isBoosted ||
+          (record.snapshotData['featured'] == true) ||
+          (record.snapshotData['is_featured'] == true) ||
+          (record.snapshotData['promoted'] == true) ||
+          (record.snapshotData['is_promoted'] == true) ||
+          (record.snapshotData['highlight'] == true),
       popularityScore: record.clickCount,
     );
   } on ArgumentError {
@@ -113,6 +166,9 @@ List<EventLink> _linksFromRecord(EventsRecord record) {
 
 TicketAvailability _ticketAvailability(String value) {
   final normalized = value.trim().toLowerCase();
+  if (normalized.contains('cancel')) {
+    return TicketAvailability.unavailable;
+  }
   if (normalized.contains('sold') || normalized.contains('esgot')) {
     return TicketAvailability.soldOut;
   }

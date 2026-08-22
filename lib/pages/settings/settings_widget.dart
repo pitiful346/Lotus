@@ -2,6 +2,7 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/custom_code/widgets/lotus_notification_settings.dart';
+import '/custom_code/widgets/lotus_admin_screen.dart';
 import '/custom_code/auth/lotus_account_actions.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
@@ -333,6 +334,117 @@ class _SettingsWidgetState extends State<SettingsWidget> {
                                             Icons.chevron_right_rounded,
                                             color: FlutterFlowTheme.of(context)
                                                 .hint,
+                                            size: 20.0,
+                                          ),
+                                        ].divide(SizedBox(
+                                            width: FlutterFlowTheme.of(context)
+                                                .designToken
+                                                .spacing
+                                                .md)),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                InkWell(
+                                  splashColor: Colors.transparent,
+                                  focusColor: Colors.transparent,
+                                  hoverColor: Colors.transparent,
+                                  highlightColor: Colors.transparent,
+                                  onTap: () async {
+                                    context.pushNamed(LotusAdminScreen.routeName);
+                                  },
+                                  child: Container(
+                                    decoration: const BoxDecoration(),
+                                    child: Padding(
+                                      padding: EdgeInsetsDirectional.fromSTEB(
+                                          0.0,
+                                          FlutterFlowTheme.of(context)
+                                              .designToken
+                                              .spacing
+                                              .md,
+                                          0.0,
+                                          FlutterFlowTheme.of(context)
+                                              .designToken
+                                              .spacing
+                                              .md),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.max,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 40.0,
+                                            height: 40.0,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0x20B7F34A),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      FlutterFlowTheme.of(
+                                                              context)
+                                                          .designToken
+                                                          .radius
+                                                          .md),
+                                              border: Border.all(
+                                                color: const Color(0xFFB7F34A)
+                                                    .withValues(alpha: 0.4),
+                                                width: 1.0,
+                                              ),
+                                            ),
+                                            alignment:
+                                                const AlignmentDirectional(0.0, 0.0),
+                                            child: const Icon(
+                                              Icons.admin_panel_settings_rounded,
+                                              color: Color(0xFFB7F34A),
+                                              size: 20.0,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 1,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Lotus Backoffice & Moderação',
+                                                  style: FlutterFlowTheme.of(
+                                                          context)
+                                                      .labelLarge
+                                                      .override(
+                                                        font:
+                                                            GoogleFonts.poppins(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                        color: Colors.white,
+                                                        letterSpacing: 0.0,
+                                                      ),
+                                                ),
+                                                Text(
+                                                  'Promoters, eventos, radar e estatísticas',
+                                                  maxLines: 1,
+                                                  style: FlutterFlowTheme.of(
+                                                          context)
+                                                      .bodySmall
+                                                      .override(
+                                                        font: GoogleFonts
+                                                            .urbanist(),
+                                                        color: const Color(
+                                                            0xFF9AA8B9),
+                                                      ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ].divide(const SizedBox(height: 2.0)),
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.chevron_right_rounded,
+                                            color: Color(0xFF9AA8B9),
                                             size: 20.0,
                                           ),
                                         ].divide(SizedBox(

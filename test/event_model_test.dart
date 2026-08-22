@@ -107,6 +107,45 @@ void main() {
       );
     });
   });
+
+  group('EventOrganizer', () {
+    test('captures organizer profile and social metadata', () {
+      final organizer = EventOrganizer(
+        id: 'organizers/org-1',
+        name: 'Lotus Club',
+        legalName: 'Lotus Club Lda',
+        description: 'Espaço cultural e música ao vivo.',
+        imageUri: Uri.parse('https://example.com/logo.png'),
+        bannerUri: Uri.parse('https://example.com/banner.png'),
+        websiteUri: Uri.parse('https://example.com'),
+        instagramUri: Uri.parse('https://instagram.com/lotusclub'),
+        isVerified: true,
+        followerCount: 150,
+      );
+
+      expect(organizer.id, 'organizers/org-1');
+      expect(organizer.name, 'Lotus Club');
+      expect(organizer.legalName, 'Lotus Club Lda');
+      expect(organizer.description, 'Espaço cultural e música ao vivo.');
+      expect(organizer.imageUri, Uri.parse('https://example.com/logo.png'));
+      expect(organizer.bannerUri, Uri.parse('https://example.com/banner.png'));
+      expect(organizer.websiteUri, Uri.parse('https://example.com'));
+      expect(organizer.instagramUri, Uri.parse('https://instagram.com/lotusclub'));
+      expect(organizer.isVerified, isTrue);
+      expect(organizer.followerCount, 150);
+    });
+
+    test('rejects empty id or name', () {
+      expect(
+        () => EventOrganizer(id: '', name: 'Lotus'),
+        throwsArgumentError,
+      );
+      expect(
+        () => EventOrganizer(id: 'org-1', name: '  '),
+        throwsArgumentError,
+      );
+    });
+  });
 }
 
 Event _minimalEvent({

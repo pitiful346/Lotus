@@ -33,12 +33,22 @@ class _LotusAccountActionsState extends State<LotusAccountActions> {
         child: OutlinedButton.icon(
           key: const Key('account-sign-out'),
           onPressed: _signingOut ? null : _confirmSignOut,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Color(0xFF293342)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
           icon: _signingOut
               ? const SizedBox.square(
                   dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
-              : const Icon(Icons.logout_rounded),
+              : const Icon(Icons.logout_rounded, color: Color(0xFF94A3B8)),
           label: const Text('Terminar sessão'),
         ),
       ),
@@ -48,7 +58,7 @@ class _LotusAccountActionsState extends State<LotusAccountActions> {
         onPressed: _signingOut ? null : _confirmDeleteAccount,
         icon: const Icon(Icons.delete_forever_outlined),
         label: const Text('Eliminar conta'),
-        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+        style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF5252)),
       ),
     ],
   );
@@ -68,7 +78,14 @@ class _LotusAccountActionsState extends State<LotusAccountActions> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Terminar sessão'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB7F34A),
+              foregroundColor: const Color(0xFF11161D),
+            ),
+            child: const Text(
+              'Terminar sessão',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -110,9 +127,28 @@ class _LotusAccountActionsState extends State<LotusAccountActions> {
             TextField(
               key: const Key('delete-account-password'),
               obscureText: true,
+              style: const TextStyle(color: Colors.white),
               onChanged: (value) => enteredPassword = value,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Confirma a palavra-passe',
+                labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                filled: true,
+                fillColor: const Color(0xFF0A0E13),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFF293342)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFF293342)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFB7F34A),
+                    width: 1.5,
+                  ),
+                ),
               ),
             ),
           ],
@@ -125,8 +161,14 @@ class _LotusAccountActionsState extends State<LotusAccountActions> {
           FilledButton(
             key: const Key('confirm-delete-account'),
             onPressed: () => Navigator.pop(dialogContext, enteredPassword),
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('Eliminar definitivamente'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF453A),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text(
+              'Eliminar definitivamente',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),

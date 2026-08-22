@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lotus_core/lotus_core.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -11,13 +11,16 @@ const _mapboxAccessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
 const _eventSourceId = 'lotus-events';
 const _clusterLayerId = 'lotus-event-clusters';
 const _clusterCountLayerId = 'lotus-event-cluster-count';
-const _eventLayerId = 'lotus-event-pins';
-const _pinImagePrefix = 'lotus-event-pin';
-const _pinCanvasSize = 64;
+const _eventLayerId = 'lotus-event-posters';
+const _pixelWidth = 112;
+const _pixelHeight = 148;
 const _initialZoom = 14.0;
 const _explorationPitch = 44.0;
 const _eventPreviewCameraPadding = 300.0;
-final Map<String, Uint8List> _pinImageCache = {};
+
+final Map<String, Uint8List> _posterImageCache = {};
+final Map<String, ui.Image> _decodedImageCache = {};
+
 bool get isLotusHomeMapSupported => Platform.isAndroid || Platform.isIOS;
 
 Widget buildLotusHomeMap({
@@ -30,6 +33,8 @@ Widget buildLotusHomeMap({
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
   required GeoCoordinates initialCenter,
+  ValueChanged<List<String>>? onStackedEventsTap,
+  ValueChanged<GeoCoordinates>? onClusterTapArea,
 }) {
   if (!isLotusHomeMapSupported) {
     return const _UnsupportedMapView();
@@ -49,6 +54,8 @@ Widget buildLotusHomeMap({
     userCoordinates: userCoordinates,
     centerOnUserRequest: centerOnUserRequest,
     initialCenter: initialCenter,
+    onStackedEventsTap: onStackedEventsTap,
+    onClusterTapArea: onClusterTapArea,
   );
 }
 
@@ -63,6 +70,8 @@ class _NativeLotusHomeMap extends StatefulWidget {
     required this.userCoordinates,
     required this.centerOnUserRequest,
     required this.initialCenter,
+    this.onStackedEventsTap,
+    this.onClusterTapArea,
   });
 
   final List<Event> events;
@@ -74,6 +83,8 @@ class _NativeLotusHomeMap extends StatefulWidget {
   final GeoCoordinates? userCoordinates;
   final int centerOnUserRequest;
   final GeoCoordinates initialCenter;
+  final ValueChanged<List<String>>? onStackedEventsTap;
+  final ValueChanged<GeoCoordinates>? onClusterTapArea;
 
   @override
   State<_NativeLotusHomeMap> createState() => _NativeLotusHomeMapState();
@@ -87,14 +98,24 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   bool _isSyncingEvents = false;
   bool _isReportingViewport = false;
   int _eventSyncVersion = 0;
+  late final CameraViewportState _initialViewport;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    // Resource options must be configured before the native map is created.
     MapboxOptions.setAccessToken(_mapboxAccessToken);
+    _initialViewport = CameraViewportState(
+      center: Point(
+        coordinates: Position(
+          widget.initialCenter.longitude,
+          widget.initialCenter.latitude,
+        ),
+      ),
+      zoom: _initialZoom,
+      bearing: 0,
+      pitch: _explorationPitch,
+    );
   }
 
   @override
@@ -130,14 +151,34 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // MapWidget owns and disposes the native MapboxMap controller.
     _mapboxMap = null;
     super.dispose();
   }
 
   Future<void> _onMapCreated(MapboxMap mapboxMap) async {
     _mapboxMap = mapboxMap;
-    _applyDarkStyle();
+    await mapboxMap.setBounds(
+      CameraBoundsOptions(
+        minZoom: 1.0,
+        maxZoom: 22.0,
+        minPitch: 0.0,
+        maxPitch: 70.0,
+      ),
+    );
+    await mapboxMap.gestures.updateSettings(
+      GesturesSettings(
+        pinchToZoomEnabled: true,
+        doubleTapToZoomInEnabled: true,
+        doubleTouchToZoomOutEnabled: true,
+        quickZoomEnabled: true,
+        pitchEnabled: true,
+        rotateEnabled: true,
+        scrollEnabled: true,
+        pinchToZoomDecelerationEnabled: true,
+        increasePinchToZoomThresholdWhenRotating: false,
+      ),
+    );
+    await _applyDarkStyle();
     await _updateUserLocationSettings();
     if (widget.centerOnUserRequest > 0) {
       await _centerOnUser();
@@ -166,8 +207,8 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
         FlutterErrorDetails(
           exception: error,
           stack: stackTrace,
-          library: 'lotus event map',
-          context: ErrorDescription('while synchronizing clustered events'),
+          library: 'lotus poster map',
+          context: ErrorDescription('while synchronizing poster markers'),
         ),
       );
     } finally {
@@ -180,10 +221,55 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     if (mapboxMap == null || !_isStyleReady) {
       return;
     }
+
+    final groups = groupLotusEventsByProximity(widget.events);
+
+    // Pre-cache and add poster images to map style
+    for (final group in groups) {
+      final events = group.events;
+      final isSelected = events.any((e) => e.id == widget.selectedEventId);
+      final isFeatured = events.any((e) => e.isFeatured);
+      final primaryEvent = isSelected
+          ? events.firstWhere((e) => e.id == widget.selectedEventId)
+          : (events.firstWhere((e) => e.isFeatured, orElse: () => events.first));
+
+      final imageId = buildLotusPosterImageId(
+        primaryEvent,
+        selected: isSelected,
+        featured: isFeatured,
+        stackedCount: events.length,
+      );
+
+      if (!await mapboxMap.style.hasStyleImage(imageId)) {
+        var bytes = _posterImageCache[imageId];
+        if (bytes == null) {
+          final decodedImage =
+              await _loadAndCacheEventImage(primaryEvent.imageUri);
+          bytes = await _renderPosterMarkerImage(
+            image: decodedImage,
+            selected: isSelected,
+            featured: isFeatured,
+            stackedCount: events.length,
+            category: _pinCategory(primaryEvent),
+          );
+          _posterImageCache[imageId] = bytes;
+        }
+        await mapboxMap.style.addStyleImage(
+          imageId,
+          2.0,
+          MbxImage(width: _pixelWidth, height: _pixelHeight, data: bytes),
+          false,
+          const [],
+          const [],
+          null,
+        );
+      }
+    }
+
     final source = await mapboxMap.style.getSource(_eventSourceId);
     if (source is GeoJsonSource) {
       await source.updateGeoJSON(
-        _eventFeatureCollection(widget.events, widget.selectedEventId),
+        buildLotusEventGroupFeatureCollection(groups, widget.selectedEventId),
       );
     }
   }
@@ -196,17 +282,19 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     _isStyleReady = false;
     await _applyDarkStyle();
 
-    await _addPinImages(mapboxMap);
-
     if (!await mapboxMap.style.styleSourceExists(_eventSourceId)) {
+      final groups = groupLotusEventsByProximity(widget.events);
       await mapboxMap.style.addSource(
         GeoJsonSource(
           id: _eventSourceId,
-          data: _eventFeatureCollection(widget.events, widget.selectedEventId),
+          data: buildLotusEventGroupFeatureCollection(
+            groups,
+            widget.selectedEventId,
+          ),
           cluster: true,
-          clusterRadius: 52,
-          clusterMaxZoom: 14,
-          clusterMinPoints: 3,
+          clusterRadius: 48,
+          clusterMaxZoom: 15,
+          clusterMinPoints: 4,
         ),
       );
     }
@@ -220,30 +308,6 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     _isStyleReady = true;
     _requestEventSync();
     await _reportViewport();
-  }
-
-  Future<void> _addPinImages(MapboxMap mapboxMap) async {
-    for (final category in _LotusPinCategory.values) {
-      for (final selected in const [false, true]) {
-        final id = _pinImageId(category, selected: selected);
-        if (await mapboxMap.style.hasStyleImage(id)) {
-          continue;
-        }
-        final bytes = _pinImageCache[id] ??= await _renderPinImage(
-          category: category,
-          selected: selected,
-        );
-        await mapboxMap.style.addStyleImage(
-          id,
-          1,
-          MbxImage(width: _pinCanvasSize, height: _pinCanvasSize, data: bytes),
-          false,
-          const [],
-          const [],
-          null,
-        );
-      }
-    }
   }
 
   Future<void> _addLayerIfMissing(
@@ -261,6 +325,7 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     if (mapboxMap == null || !_isStyleReady) {
       return;
     }
+
     final features = await mapboxMap.queryRenderedFeatures(
       RenderedQueryGeometry.fromScreenCoordinate(context.touchPosition),
       RenderedQueryOptions(
@@ -268,6 +333,7 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
         filter: null,
       ),
     );
+
     QueriedRenderedFeature? result;
     for (final feature in features) {
       if (feature != null) {
@@ -280,26 +346,56 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
       return;
     }
 
+    // Cluster tap
     if (result.layers.contains(_clusterLayerId)) {
       widget.onMapTapEmpty();
       final camera = await mapboxMap.getCameraState();
-      await mapboxMap.easeTo(
-        CameraOptions(
-          center: context.point,
-          zoom: (camera.zoom + 2).clamp(0, 16).toDouble(),
-          bearing: camera.bearing,
-          pitch: camera.pitch,
-          padding: camera.padding,
-        ),
-        MapAnimationOptions(duration: 500, startDelay: 0),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 520));
-      await _reportViewport();
+      if (camera.zoom < 14.8) {
+        await mapboxMap.easeTo(
+          CameraOptions(
+            center: context.point,
+            zoom: (camera.zoom + 2.5).clamp(0, 20).toDouble(),
+            bearing: camera.bearing,
+            pitch: camera.pitch,
+            padding: camera.padding,
+          ),
+          MapAnimationOptions(duration: 500, startDelay: 0),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 520));
+        await _reportViewport();
+      } else {
+        // At high zoom, cluster cannot be expanded further: open area sheet
+        final coords = GeoCoordinates(
+          latitude: context.point.coordinates.lat.toDouble(),
+          longitude: context.point.coordinates.lng.toDouble(),
+        );
+        widget.onClusterTapArea?.call(coords);
+      }
       return;
     }
 
+    // Poster marker tap
     final properties = result.queriedFeature.feature['properties'];
     if (properties is Map) {
+      final isStacked = properties['isStacked'] == true;
+      final count = properties['count'] as int? ?? 1;
+
+      if (isStacked && count > 1) {
+        final rawIds = properties['eventIds'];
+        List<String> ids = [];
+        if (rawIds is String) {
+          try {
+            ids = List<String>.from(jsonDecode(rawIds));
+          } catch (_) {}
+        } else if (rawIds is List) {
+          ids = rawIds.cast<String>();
+        }
+        if (ids.length > 1) {
+          widget.onStackedEventsTap?.call(ids);
+          return;
+        }
+      }
+
       final eventId = properties['eventId'];
       if (eventId is String) {
         widget.onEventTap(eventId);
@@ -387,14 +483,14 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
         center: Point(
           coordinates: Position(coordinates.longitude, coordinates.latitude),
         ),
-        zoom: 15.5,
+        zoom: 15.0,
         bearing: camera.bearing,
         pitch: camera.pitch,
         padding: MbxEdgeInsets(top: 0, left: 0, bottom: 0, right: 0),
       ),
-      MapAnimationOptions(duration: 900, startDelay: 0),
+      MapAnimationOptions(duration: 800, startDelay: 0),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 920));
+    await Future<void>.delayed(const Duration(milliseconds: 820));
     if (!mounted || _mapboxMap != mapboxMap) return;
     await _reportViewport();
   }
@@ -420,13 +516,15 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     final coordinates = selectedEvent?.location.coordinates;
     if (coordinates == null) return;
     final camera = await mapboxMap.getCameraState();
-    final targetZoom = camera.zoom < 14.25 ? 14.25 : camera.zoom;
+    final targetZoom = (camera.zoom < 15.5 ? 15.5 : camera.zoom)
+        .clamp(1.0, 20.0)
+        .toDouble();
     await mapboxMap.easeTo(
       CameraOptions(
         center: Point(
           coordinates: Position(coordinates.longitude, coordinates.latitude),
         ),
-        zoom: targetZoom.clamp(0, 16).toDouble(),
+        zoom: targetZoom,
         bearing: camera.bearing,
         pitch: camera.pitch,
         padding: MbxEdgeInsets(
@@ -436,7 +534,7 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
           right: 0,
         ),
       ),
-      MapAnimationOptions(duration: 550, startDelay: 0),
+      MapAnimationOptions(duration: 600, startDelay: 0),
     );
   }
 
@@ -461,53 +559,96 @@ class _NativeLotusHomeMapState extends State<_NativeLotusHomeMap>
     return MapWidget(
       key: const ValueKey('lotus-home-map'),
       styleUri: MapboxStyles.STANDARD,
-      viewport: CameraViewportState(
-        center: Point(
-          coordinates: Position(
-            widget.initialCenter.longitude,
-            widget.initialCenter.latitude,
-          ),
-        ),
-        zoom: _initialZoom,
-        bearing: 0,
-        pitch: _explorationPitch,
-      ),
-      textureView: true,
+      viewport: _initialViewport,
       onMapCreated: _onMapCreated,
       onStyleLoadedListener: (_) => _onStyleLoaded(),
       onMapIdleListener: (_) => _reportViewport(),
       onScrollListener: _onUserCameraGesture,
       onZoomListener: _onUserCameraGesture,
-      // The SDK keeps this callback for compatibility while typed layer
-      // interactions mature; querying only Lotus layers keeps the hit test
-      // narrow and deterministic.
       // ignore: deprecated_member_use
       onTapListener: _onMapTap,
     );
   }
 }
 
-String _eventFeatureCollection(List<Event> events, String? selectedEventId) {
+class LotusLocationGroup {
+  LotusLocationGroup({required this.coordinates, required this.events});
+  final GeoCoordinates coordinates;
+  final List<Event> events;
+}
+
+List<LotusLocationGroup> groupLotusEventsByProximity(List<Event> events) {
+  final groups = <LotusLocationGroup>[];
+  const threshold = 0.00018; // ~18 meters proximity
+
+  for (final event in events) {
+    final coords = event.location.coordinates;
+    if (coords == null) continue;
+
+    LotusLocationGroup? matchingGroup;
+    for (final group in groups) {
+      final dLat = (group.coordinates.latitude - coords.latitude).abs();
+      final dLng = (group.coordinates.longitude - coords.longitude).abs();
+      if (dLat < threshold && dLng < threshold) {
+        matchingGroup = group;
+        break;
+      }
+    }
+
+    if (matchingGroup != null) {
+      matchingGroup.events.add(event);
+    } else {
+      groups.add(LotusLocationGroup(coordinates: coords, events: [event]));
+    }
+  }
+
+  return groups;
+}
+
+String buildLotusEventGroupFeatureCollection(
+  List<LotusLocationGroup> groups,
+  String? selectedEventId,
+) {
   return jsonEncode({
     'type': 'FeatureCollection',
     'features': [
-      for (final event in events)
-        if (event.location.coordinates case final coordinates?)
-          {
+      for (final group in groups)
+        () {
+          final events = group.events;
+          final isSelected = events.any((e) => e.id == selectedEventId);
+          final isFeatured = events.any((e) => e.isFeatured);
+          final primaryEvent = isSelected
+              ? events.firstWhere((e) => e.id == selectedEventId)
+              : (events.firstWhere((e) => e.isFeatured, orElse: () => events.first));
+
+          final imageId = buildLotusPosterImageId(
+            primaryEvent,
+            selected: isSelected,
+            featured: isFeatured,
+            stackedCount: events.length,
+          );
+
+          return {
             'type': 'Feature',
             'properties': {
-              'eventId': event.id,
-              'selected': event.id == selectedEventId,
-              'pinImage': _pinImageId(
-                _pinCategory(event),
-                selected: event.id == selectedEventId,
-              ),
+              'eventId': primaryEvent.id,
+              'eventIds': events.map((e) => e.id).toList(),
+              'isStacked': events.length > 1,
+              'count': events.length,
+              'selected': isSelected,
+              'featured': isFeatured,
+              'posterImageId': imageId,
+              'sortKey': isSelected ? 3 : (isFeatured ? 2 : 1),
             },
             'geometry': {
               'type': 'Point',
-              'coordinates': [coordinates.longitude, coordinates.latitude],
+              'coordinates': [
+                group.coordinates.longitude,
+                group.coordinates.latitude,
+              ],
             },
-          },
+          };
+        }(),
     ],
   });
 }
@@ -518,18 +659,18 @@ Map<String, Object> _clusterLayer() => {
   'source': _eventSourceId,
   'filter': ['has', 'point_count'],
   'paint': {
-    'circle-color': '#B7F34A',
+    'circle-color': '#151B23',
     'circle-radius': [
       'step',
       ['get', 'point_count'],
-      19,
+      18,
       10,
-      24,
-      40,
+      22,
       30,
+      26,
     ],
-    'circle-stroke-width': 3,
-    'circle-stroke-color': '#11161D',
+    'circle-stroke-width': 3.5,
+    'circle-stroke-color': '#B7F34A',
   },
 };
 
@@ -540,9 +681,9 @@ Map<String, Object> _clusterCountLayer() => {
   'filter': ['has', 'point_count'],
   'layout': {
     'text-field': ['get', 'point_count_abbreviated'],
-    'text-size': 12,
+    'text-size': 13,
   },
-  'paint': {'text-color': '#11161D'},
+  'paint': {'text-color': '#B7F34A'},
 };
 
 Map<String, Object> _unclusteredEventLayer() => {
@@ -554,21 +695,35 @@ Map<String, Object> _unclusteredEventLayer() => {
     ['has', 'point_count'],
   ],
   'layout': {
-    'icon-image': ['get', 'pinImage'],
-    'icon-anchor': 'center',
+    'icon-image': ['get', 'posterImageId'],
+    'icon-anchor': 'bottom',
     'icon-size': [
-      'case',
-      [
-        '==',
-        ['get', 'selected'],
-        true,
-      ],
-      0.80,
-      0.68,
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      10,
+      0.70,
+      14,
+      0.85,
+      17,
+      1.05,
     ],
     'icon-allow-overlap': true,
+    'symbol-sort-key': ['get', 'sortKey'],
   },
 };
+
+String buildLotusPosterImageId(
+  Event event, {
+  required bool selected,
+  required bool featured,
+  required int stackedCount,
+}) {
+  final countSuffix = stackedCount > 1 ? '-stack$stackedCount' : '';
+  final stateSuffix = selected ? '-selected' : (featured ? '-featured' : '');
+  final imageKey = (event.imageUri?.toString() ?? 'noimg').hashCode;
+  return 'lotus-poster-$imageKey$stateSuffix$countSuffix';
+}
 
 enum _LotusPinCategory {
   music,
@@ -607,82 +762,300 @@ _LotusPinCategory _pinCategory(Event event) {
   return _LotusPinCategory.other;
 }
 
-String _pinImageId(_LotusPinCategory category, {required bool selected}) =>
-    '$_pinImagePrefix-${category.name}${selected ? '-selected' : ''}';
-
 IconData _pinIcon(_LotusPinCategory category) => switch (category) {
-  _LotusPinCategory.music => Icons.music_note,
-  _LotusPinCategory.theatre => Icons.theater_comedy,
-  _LotusPinCategory.party => Icons.bolt,
-  _LotusPinCategory.sport => Icons.sports_soccer,
-  _LotusPinCategory.culture => Icons.account_balance,
-  _LotusPinCategory.food => Icons.restaurant,
-  _LotusPinCategory.workshop => Icons.build,
-  _LotusPinCategory.comedy => Icons.sentiment_satisfied,
-  _LotusPinCategory.other => Icons.local_activity,
+  _LotusPinCategory.music => Icons.music_note_rounded,
+  _LotusPinCategory.theatre => Icons.theater_comedy_rounded,
+  _LotusPinCategory.party => Icons.bolt_rounded,
+  _LotusPinCategory.sport => Icons.sports_soccer_rounded,
+  _LotusPinCategory.culture => Icons.palette_rounded,
+  _LotusPinCategory.food => Icons.restaurant_rounded,
+  _LotusPinCategory.workshop => Icons.lightbulb_rounded,
+  _LotusPinCategory.comedy => Icons.sentiment_very_satisfied_rounded,
+  _LotusPinCategory.other => Icons.local_activity_rounded,
 };
 
-Future<Uint8List> _renderPinImage({
-  required _LotusPinCategory category,
+Future<ui.Image?> _loadAndCacheEventImage(Uri? uri) async {
+  if (uri == null) return null;
+  final url = uri.toString();
+  if (_decodedImageCache.containsKey(url)) {
+    return _decodedImageCache[url];
+  }
+  try {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+    final request = await client.getUrl(uri);
+    final response = await request.close().timeout(const Duration(seconds: 3));
+    if (response.statusCode == 200) {
+      final bytes = await consolidateHttpClientResponseBytes(response);
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: 96,
+        targetHeight: 128,
+      );
+      final frame = await codec.getNextFrame();
+      _decodedImageCache[url] = frame.image;
+      return frame.image;
+    }
+  } catch (_) {}
+  return null;
+}
+
+Future<Uint8List> _renderPosterMarkerImage({
+  required ui.Image? image,
   required bool selected,
+  required bool featured,
+  required int stackedCount,
+  required _LotusPinCategory category,
 }) async {
-  const size = 64.0;
-  const center = Offset(size / 2, size / 2);
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  if (selected) {
-    canvas.drawCircle(center, 27, Paint()..color = const Color(0x3DB7F34A));
-  }
-  canvas.drawCircle(
-    center.translate(0, 2),
-    21,
-    Paint()
-      ..color = const Color(0x73000000)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-  );
-  canvas.drawCircle(
-    center,
-    selected ? 22.5 : 21,
-    Paint()
-      ..color = selected ? const Color(0xFFF7FAFC) : const Color(0xFF11161D),
-  );
-  canvas.drawCircle(
-    center,
-    selected ? 19.5 : 18,
-    Paint()..color = const Color(0xFFB7F34A),
+
+  // Scaled 2x for Retina sharp rendering
+  canvas.scale(2.0, 2.0);
+
+  final mainCardRect = Rect.fromLTWH(6, 4, 44, 58);
+  final mainCardRRect = RRect.fromRectAndRadius(
+    mainCardRect,
+    const Radius.circular(7),
   );
 
-  final icon = _pinIcon(category);
-  final iconPainter = TextPainter(
-    text: TextSpan(
-      text: String.fromCharCode(icon.codePoint),
-      style: TextStyle(
-        color: const Color(0xFF11161D),
-        fontSize: selected ? 20 : 18,
-        fontFamily: icon.fontFamily,
-        package: icon.fontPackage,
-      ),
-    ),
-    textDirection: TextDirection.ltr,
-  )..layout();
-  iconPainter.paint(
-    canvas,
-    Offset(
-      center.dx - iconPainter.width / 2,
-      center.dy - iconPainter.height / 2,
-    ),
+  // 1. Stacked Deck Effect (behind main card)
+  if (stackedCount >= 2) {
+    if (stackedCount >= 3) {
+      final thirdCardRect = Rect.fromLTWH(11, 0, 42, 56);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(thirdCardRect, const Radius.circular(7)),
+        Paint()..color = const Color(0xFF0A0E13),
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(thirdCardRect, const Radius.circular(7)),
+        Paint()
+          ..color = const Color(0xFF293342)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+    }
+    final secondCardRect = Rect.fromLTWH(9, 2, 43, 57);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(secondCardRect, const Radius.circular(7)),
+      Paint()..color = const Color(0xFF0F141B),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(secondCardRect, const Radius.circular(7)),
+      Paint()
+        ..color = const Color(0xFF293342)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+  }
+
+  // 2. Drop Shadow for main card
+  canvas.drawRRect(
+    mainCardRRect.shift(const Offset(0, 3)),
+    Paint()
+      ..color = const Color(0x99000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5),
   );
+
+  // 3. Bottom Pointer / Needle connecting to exact coordinate
+  final pointerPath = Path()
+    ..moveTo(28 - 5, 61)
+    ..lineTo(28 + 5, 61)
+    ..lineTo(28, 71)
+    ..close();
+
+  // Pointer Shadow
+  canvas.drawPath(
+    pointerPath.shift(const Offset(0, 1.5)),
+    Paint()
+      ..color = const Color(0x80000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+  );
+
+  // Pointer Body
+  final pointerColor = selected
+      ? const Color(0xFFB7F34A)
+      : (featured ? const Color(0xFFB7F34A) : const Color(0xFF151B23));
+  canvas.drawPath(pointerPath, Paint()..color = pointerColor);
+
+  // Pointer Dot at exact anchor point (28, 70.5)
+  canvas.drawCircle(
+    const Offset(28, 70.5),
+    2.5,
+    Paint()
+      ..color = selected || featured
+          ? const Color(0xFFB7F34A)
+          : const Color(0xFFFFFFFF),
+  );
+
+  // 4. Poster Base Background
+  canvas.drawRRect(
+    mainCardRRect,
+    Paint()..color = const Color(0xFF151B23),
+  );
+
+  // 5. Draw Image Content or Fallback
+  canvas.save();
+  canvas.clipRRect(mainCardRRect);
+
+  if (image != null) {
+    final srcRect = Rect.fromLTWH(
+      0,
+      0,
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+    canvas.drawImageRect(image, srcRect, mainCardRect, Paint());
+  } else {
+    // Elegant Lotus Fallback Card
+    final gradient = ui.Gradient.linear(
+      mainCardRect.topLeft,
+      mainCardRect.bottomRight,
+      const [Color(0xFF1B232C), Color(0xFF0A0E13)],
+    );
+    canvas.drawRect(mainCardRect, Paint()..shader = gradient);
+
+    final icon = _pinIcon(category);
+    final iconPainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          color: const Color(0xFFB7F34A),
+          fontSize: 20,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    iconPainter.paint(
+      canvas,
+      Offset(
+        mainCardRect.center.dx - iconPainter.width / 2,
+        mainCardRect.center.dy - iconPainter.height / 2,
+      ),
+    );
+  }
+  canvas.restore();
+
+  // 6. Outer Border and High-Contrast Outline
+  if (selected) {
+    // Glowing outer halo
+    canvas.drawRRect(
+      mainCardRRect,
+      Paint()
+        ..color = const Color(0x66B7F34A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+    );
+    // Sharp Neon Green Border
+    canvas.drawRRect(
+      mainCardRRect,
+      Paint()
+        ..color = const Color(0xFFB7F34A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+  } else if (featured) {
+    // Featured Neon Green Border
+    canvas.drawRRect(
+      mainCardRRect,
+      Paint()
+        ..color = const Color(0xFFB7F34A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
+    );
+
+    // Featured Star Badge at Top-Left
+    final starRect = Rect.fromLTWH(4, 2, 14, 14);
+    canvas.drawCircle(
+      starRect.center,
+      7,
+      Paint()..color = const Color(0xFF080B10),
+    );
+    canvas.drawCircle(
+      starRect.center,
+      6,
+      Paint()..color = const Color(0xFFB7F34A),
+    );
+    final starPainter = TextPainter(
+      text: const TextSpan(
+        text: '★',
+        style: TextStyle(
+          color: Color(0xFF080B10),
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    starPainter.paint(
+      canvas,
+      Offset(
+        starRect.center.dx - starPainter.width / 2,
+        starRect.center.dy - starPainter.height / 2,
+      ),
+    );
+  } else {
+    // Normal Marker Border
+    canvas.drawRRect(
+      mainCardRRect,
+      Paint()
+        ..color = const Color(0xFF080B10)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
+    );
+    canvas.drawRRect(
+      mainCardRRect,
+      Paint()
+        ..color = const Color(0x66FFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0,
+    );
+  }
+
+  // 7. Stacked Count Pill Badge (Top-Right)
+  if (stackedCount > 1) {
+    final badgeRect = Rect.fromLTWH(36, 1, 17, 14);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(badgeRect, const Radius.circular(7)),
+      Paint()..color = const Color(0xFF080B10),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(badgeRect, const Radius.circular(7)),
+      Paint()
+        ..color = const Color(0xFFB7F34A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '$stackedCount',
+        style: const TextStyle(
+          color: Color(0xFFB7F34A),
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        badgeRect.center.dx - textPainter.width / 2,
+        badgeRect.center.dy - textPainter.height / 2,
+      ),
+    );
+  }
 
   final picture = recorder.endRecording();
-  final image = await picture.toImage(_pinCanvasSize, _pinCanvasSize);
-  // The native Mapbox bridges decode this payload as an encoded platform
-  // image (UIImage/Bitmap), so provide PNG bytes rather than Flutter's raw
-  // pixel buffer.
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  image.dispose();
+  final renderedImage = await picture.toImage(_pixelWidth, _pixelHeight);
+  final bytes = await renderedImage.toByteData(format: ui.ImageByteFormat.png);
+  renderedImage.dispose();
   picture.dispose();
+
   if (bytes == null) {
-    throw StateError('Could not render the event pin image.');
+    throw StateError('Could not render the poster marker image.');
   }
   return bytes.buffer.asUint8List();
 }

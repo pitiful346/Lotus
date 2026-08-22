@@ -61,6 +61,24 @@ class UsersRecord extends FirestoreRecord {
     _favoritos = getDataList(snapshotData['favoritos']);
   }
 
+  bool get isAdmin =>
+      (snapshotData['is_admin'] == true) ||
+      (snapshotData['role'] == 'admin') ||
+      (snapshotData['role'] == 'ADMIN');
+
+  bool get isPromoter =>
+      (snapshotData['is_promoter'] == true) ||
+      (snapshotData['role'] == 'promoter') ||
+      (snapshotData['role'] == 'PROMOTER');
+
+  bool get isVerified =>
+      (snapshotData['is_verified'] == true) ||
+      (snapshotData['verified'] == true);
+
+  bool get isBlocked =>
+      (snapshotData['is_blocked'] == true) ||
+      (snapshotData['blocked'] == true);
+
   static CollectionReference get collection =>
       FirebaseFirestore.instance.collection('users');
 

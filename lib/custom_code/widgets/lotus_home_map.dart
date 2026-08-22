@@ -11,16 +11,19 @@ import 'package:flutter/material.dart';
 // Begin custom widget code
 // DO NOT REMOVE OR MODIFY THE CODE ABOVE!
 
+import 'package:firebase_auth/firebase_auth.dart';
 import '/pages/event_details/event_details_widget.dart';
 import '/pages/search/search_widget.dart';
 import '/custom_code/product_quality/lotus_product_quality.dart';
 import 'dart:async';
 import 'package:lotus_core/lotus_core.dart';
 
-import '../event_mapping/development_map_event_repository.dart';
+import '../event_mapping/firestore_favorite_repository.dart';
+import '../event_mapping/firestore_map_event_repository.dart';
 import '../location/user_location_controller.dart';
 import 'event_filter_sheet.dart';
 import 'event_map_preview_card.dart';
+import 'lotus_event_tiles.dart';
 import 'lotus_home_map_platform_stub.dart'
     if (dart.library.io) 'lotus_home_map_platform_native.dart'
     as platform;
@@ -34,9 +37,8 @@ class LotusHomeMap extends StatefulWidget {
     this.onOpenEvent,
     this.locationController,
     this.eventRepository,
+    this.favoriteRepository,
     this.initialCenter,
-    this.favoriteEventIds = const {},
-    this.onToggleFavorite,
   });
 
   /// Injectable for tests and future repository implementations.
@@ -45,41 +47,42 @@ class LotusHomeMap extends StatefulWidget {
   final ValueChanged<Event>? onOpenEvent;
   final UserLocationController? locationController;
   final MapEventRepository? eventRepository;
+  final FavoriteRepository? favoriteRepository;
   final GeoCoordinates? initialCenter;
-  final Set<String> favoriteEventIds;
-  final Future<void> Function(Event event, bool isFavorite)? onToggleFavorite;
 
   @override
   State<LotusHomeMap> createState() => _LotusHomeMapState();
 }
 
 class _LotusHomeMapState extends State<LotusHomeMap> {
-  static const _autoSelectFirstDevelopmentEvent = bool.fromEnvironment(
-    'LOTUS_AUTO_SELECT_DEV_EVENT',
-  );
   late UserLocationController _locationController;
   late bool _ownsLocationController;
   late MapEventRepository _eventRepository;
+  late FavoriteRepository _favoriteRepository;
+  StreamSubscription<Set<String>>? _favoritesSubscription;
+  Set<String> _favoriteIds = const {};
   List<Event> _events = const [];
   MapViewportBounds? _pendingViewport;
   MapViewportBounds? _searchedViewport;
   bool _isLoadingEvents = false;
   bool _hasEventError = false;
+  bool _isCenteredOnUser = false;
   int _eventRequestVersion = 0;
   EventFilters _filters = EventFilters();
   String? _selectedEventId;
   String? _openingEventId;
   String? _updatingFavoriteId;
   int _centerOnUserRequest = 0;
-  bool _isCenteredOnUser = false;
-  bool _didAutoSelectDevelopmentEvent = false;
 
   @override
   void initState() {
     super.initState();
     _eventRepository =
-        widget.eventRepository ?? createLotusMapEventRepository();
+        widget.eventRepository ?? const FirestoreMapEventRepository();
+    _favoriteRepository =
+        widget.favoriteRepository ?? FirestoreFavoriteRepository();
     _attachLocationController();
+    _subscribeFavorites();
   }
 
   @override
@@ -93,15 +96,45 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     if (oldWidget.eventRepository != widget.eventRepository) {
       _eventRequestVersion += 1;
       _eventRepository =
-          widget.eventRepository ?? createLotusMapEventRepository();
+          widget.eventRepository ?? const FirestoreMapEventRepository();
       _events = const [];
       _searchedViewport = null;
       _isLoadingEvents = false;
       _hasEventError = false;
     }
+    if (oldWidget.favoriteRepository != widget.favoriteRepository) {
+      _favoriteRepository =
+          widget.favoriteRepository ?? FirestoreFavoriteRepository();
+      _subscribeFavorites();
+    }
     if (oldWidget.locationController != widget.locationController) {
       _detachLocationController();
       _attachLocationController();
+    }
+  }
+
+  String get _currentUserId {
+    try {
+      return FirebaseAuth.instance.currentUser?.uid ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void _subscribeFavorites() {
+    _favoritesSubscription?.cancel();
+    final userId = _currentUserId;
+    if (userId.isNotEmpty) {
+      _favoritesSubscription = _favoriteRepository
+          .watchFavoriteEventIds(userId)
+          .listen(
+            (ids) {
+              if (mounted) {
+                setState(() => _favoriteIds = ids);
+              }
+            },
+            onError: (_) {},
+          );
     }
   }
 
@@ -121,6 +154,13 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     }
   }
 
+  @override
+  void dispose() {
+    _favoritesSubscription?.cancel();
+    _detachLocationController();
+    super.dispose();
+  }
+
   bool get _supportsLocation =>
       platform.isLotusHomeMapSupported || widget.locationController != null;
 
@@ -129,53 +169,35 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     if (coordinates != null) {
       cachedUserLocation = LatLng(coordinates.latitude, coordinates.longitude);
     }
+  }
+
+  void _handleViewportChanged(MapViewportBounds bounds) {
+    _pendingViewport = bounds;
+    if (_events.isEmpty && !_isLoadingEvents && !_hasEventError) {
+      _searchPendingViewport();
+      return;
+    }
     if (mounted) {
       setState(() {});
     }
   }
 
-  @override
-  void dispose() {
-    _detachLocationController();
-    super.dispose();
-  }
-
-  void _selectEvent(String eventId, Map<String, Event> eventsById) {
-    final event = eventsById[eventId];
-    if (event == null) {
-      return;
-    }
-    unawaited(LotusProductFeedback.selection());
-    setState(() => _selectedEventId = eventId);
-    widget.onEventTap?.call(event);
-  }
-
-  void _handleViewportChanged(MapViewportBounds bounds) {
-    if (widget.eventStream != null ||
-        _pendingViewport?.isApproximatelyEqualTo(bounds) == true) {
-      return;
-    }
-    setState(() => _pendingViewport = bounds);
-    if (_searchedViewport == null && !_isLoadingEvents) {
-      _searchPendingViewport();
-    }
-  }
-
   Future<void> _searchPendingViewport() async {
     final bounds = _pendingViewport;
-    if (bounds == null || _isLoadingEvents) {
+    if (bounds == null) {
       return;
     }
-    final requestVersion = ++_eventRequestVersion;
+
+    final requestVersion = _eventRequestVersion + 1;
+    _eventRequestVersion = requestVersion;
+
     setState(() {
       _isLoadingEvents = true;
       _hasEventError = false;
     });
 
     try {
-      final events = await LoadEventsInViewport(repository: _eventRepository)(
-        bounds,
-      );
+      final events = await _eventRepository.findWithin(bounds, limit: 60);
       if (!mounted || requestVersion != _eventRequestVersion) {
         return;
       }
@@ -186,16 +208,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         final currentSelectionIsVisible = events.any(
           (event) => event.id == _selectedEventId,
         );
-        if (currentSelectionIsVisible) {
-          return;
-        }
-        if (_autoSelectFirstDevelopmentEvent &&
-            !_didAutoSelectDevelopmentEvent &&
-            events.isNotEmpty &&
-            isDevelopmentEvent(events.first.id)) {
-          _selectedEventId = events.first.id;
-          _didAutoSelectDevelopmentEvent = true;
-        } else {
+        if (!currentSelectionIsVisible) {
           _selectedEventId = null;
         }
       });
@@ -207,13 +220,7 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
         _isLoadingEvents = false;
         _hasEventError = true;
       });
-      unawaited(LotusProductFeedback.error());
     }
-  }
-
-  double? _distanceTo(Event event) {
-    final user = _locationController.state.coordinates;
-    return user == null ? null : calculateDistanceToEvent(user, event);
   }
 
   Future<void> _centerOnUser() async {
@@ -235,52 +242,166 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
 
   void _showLocationProblem(UserLocationStatus status) {
     final message = switch (status) {
-      UserLocationStatus.serviceDisabled =>
-        'Ativa a localização do dispositivo para veres a tua posição.',
       UserLocationStatus.permissionDenied =>
-        'A permissão de localização foi recusada.',
+        'Autoriza a localização para ver a tua posição no mapa.',
       UserLocationStatus.permissionDeniedForever =>
-        'Ativa a localização nas definições da aplicação.',
-      _ => 'Não foi possível obter a tua localização atual.',
+        'Ativa a localização nas definições do telemóvel.',
+      UserLocationStatus.serviceDisabled =>
+        'Ativa os serviços de localização do telemóvel.',
+      UserLocationStatus.unavailable =>
+        'Não foi possível obter a tua localização.',
+      UserLocationStatus.idle ||
+      UserLocationStatus.loading ||
+      UserLocationStatus.available => null,
     };
-    final canOpenSettings =
-        status == UserLocationStatus.serviceDisabled ||
-        status == UserLocationStatus.permissionDeniedForever;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          action: canOpenSettings
-              ? SnackBarAction(
-                  label: 'Definições',
-                  onPressed: () {
-                    _locationController.openRelevantSettings();
-                  },
-                )
-              : null,
-        ),
-      );
+    if (message == null) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: status == UserLocationStatus.permissionDeniedForever
+            ? SnackBarAction(
+                label: 'Definições',
+                onPressed: _locationController.openRelevantSettings,
+              )
+            : null,
+      ),
+    );
   }
 
-  Future<void> _openEventDetails(Event event) async {
-    if (_openingEventId != null) {
+  void _selectEvent(String eventId, Map<String, Event> eventsById) {
+    unawaited(LotusProductFeedback.selection());
+    final event = eventsById[eventId];
+    setState(() => _selectedEventId = eventId);
+    if (event != null) {
+      widget.onEventTap?.call(event);
+    }
+  }
+
+  void _handleStackedEventsTap(
+    List<String> eventIds,
+    Map<String, Event> eventsById,
+  ) {
+    final matching =
+        eventIds.map((id) => eventsById[id]).whereType<Event>().toList();
+    if (matching.isEmpty) return;
+    if (matching.length == 1) {
+      _selectEvent(matching.first.id, eventsById);
       return;
     }
-    final callback = widget.onOpenEvent;
-    if (callback != null) {
-      callback(event);
+    _showEventsInAreaSheet(
+      matching,
+      title: 'Eventos neste local (${matching.length})',
+    );
+  }
+
+  void _handleClusterAreaTap(
+    GeoCoordinates coords,
+    List<Event> visibleEvents,
+  ) {
+    final nearby = visibleEvents.where((event) {
+      final c = event.location.coordinates;
+      if (c == null) return false;
+      final dLat = (c.latitude - coords.latitude).abs();
+      final dLng = (c.longitude - coords.longitude).abs();
+      return dLat < 0.003 && dLng < 0.003;
+    }).toList();
+    if (nearby.isNotEmpty) {
+      _showEventsInAreaSheet(
+        nearby,
+        title: 'Eventos nesta área (${nearby.length})',
+      );
+    }
+  }
+
+  void _showEventsInAreaSheet(
+    List<Event> eventsInArea, {
+    required String title,
+  }) {
+    unawaited(LotusProductFeedback.selection());
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _EventsInAreaSheet(
+        title: title,
+        events: eventsInArea,
+        favoriteIds: _favoriteIds,
+        onToggleFavorite: _toggleFavorite,
+        onSelectEvent: (event) {
+          Navigator.of(context).pop();
+          _selectEvent(event.id, {event.id: event});
+        },
+        onOpenDetails: (event) {
+          Navigator.of(context).pop();
+          _openEventDetails(event);
+        },
+      ),
+    );
+  }
+
+  void _handleUserMapGesture() {
+    if (mounted && _isCenteredOnUser) {
+      setState(() => _isCenteredOnUser = false);
+    }
+  }
+
+  void _clearSelectedEvent() {
+    if (mounted && _selectedEventId != null) {
+      setState(() => _selectedEventId = null);
+    }
+  }
+
+  Future<void> _toggleFavorite(Event event) async {
+    final userId = _currentUserId;
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Inicia sessão para guardar eventos nos favoritos.'),
+        ),
+      );
       return;
     }
 
-    if (isDevelopmentEvent(event.id)) {
+    final isFavorite = _favoriteIds.contains(event.id);
+    setState(() => _updatingFavoriteId = event.id);
+    try {
+      await _favoriteRepository.setFavorite(
+        userId: userId,
+        eventId: event.id,
+        isFavorite: !isFavorite,
+      );
+      if (!mounted) return;
+      unawaited(LotusProductFeedback.selection());
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'O detalhe completo fica disponível com eventos do backend.',
+            isFavorite
+                ? 'Evento removido dos favoritos.'
+                : 'Evento guardado nos favoritos.',
           ),
         ),
       );
+    } catch (_) {
+      if (!mounted) return;
+      unawaited(LotusProductFeedback.error());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível atualizar os favoritos.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingFavoriteId = null);
+      }
+    }
+  }
+
+  Future<void> _openEventDetails(Event event) async {
+    unawaited(LotusProductFeedback.selection());
+    widget.onOpenEvent?.call(event);
+    if (widget.onOpenEvent != null) {
       return;
     }
 
@@ -309,50 +430,6 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     } finally {
       if (mounted) {
         setState(() => _openingEventId = null);
-      }
-    }
-  }
-
-  Future<void> _toggleFavorite(Event event) async {
-    final callback = widget.onToggleFavorite;
-    if (callback == null || _updatingFavoriteId != null) {
-      return;
-    }
-    if (isDevelopmentEvent(event.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Os favoritos requerem um evento do backend.'),
-        ),
-      );
-      return;
-    }
-
-    final wasFavorite = widget.favoriteEventIds.contains(event.id);
-    setState(() => _updatingFavoriteId = event.id);
-    try {
-      await callback(event, wasFavorite);
-      if (!mounted) return;
-      unawaited(LotusProductFeedback.selection());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            wasFavorite
-                ? 'Evento removido dos favoritos.'
-                : 'Evento guardado nos favoritos.',
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      unawaited(LotusProductFeedback.error());
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Não foi possível atualizar os favoritos.'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _updatingFavoriteId = null);
       }
     }
   }
@@ -460,6 +537,10 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
             initialCenter:
                 widget.initialCenter ??
                 GeoCoordinates(latitude: 41.14961, longitude: -8.61099),
+            onStackedEventsTap: (ids) =>
+                _handleStackedEventsTap(ids, eventsById),
+            onClusterTapArea: (coords) =>
+                _handleClusterAreaTap(coords, visibleEvents),
           ),
         ),
         if (isLoading) const _MapLoadingIndicator(),
@@ -503,15 +584,11 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
                   event: selectedEvent,
                   distanceMeters: _distanceTo(selectedEvent),
                   isOpening: _openingEventId == selectedEvent.id,
-                  isFavorite: widget.favoriteEventIds.contains(
-                    selectedEvent.id,
-                  ),
+                  isFavorite: _favoriteIds.contains(selectedEvent.id),
                   isUpdatingFavorite: _updatingFavoriteId == selectedEvent.id,
                   bottomInset: 108,
                   onClose: _clearSelectedEvent,
-                  onToggleFavorite: widget.onToggleFavorite == null
-                      ? null
-                      : () => _toggleFavorite(selectedEvent),
+                  onToggleFavorite: () => _toggleFavorite(selectedEvent),
                   onOpenDetails: () => _openEventDetails(selectedEvent),
                 ),
         ),
@@ -519,16 +596,12 @@ class _LotusHomeMapState extends State<LotusHomeMap> {
     );
   }
 
-  void _handleUserMapGesture() {
-    if (mounted && _isCenteredOnUser) {
-      setState(() => _isCenteredOnUser = false);
+  double? _distanceTo(Event event) {
+    final coordinates = _locationController.state.coordinates;
+    if (coordinates == null) {
+      return null;
     }
-  }
-
-  void _clearSelectedEvent() {
-    if (mounted && _selectedEventId != null) {
-      setState(() => _selectedEventId = null);
-    }
+    return calculateDistanceToEvent(coordinates, event);
   }
 }
 
@@ -549,6 +622,9 @@ class _OpenSearchButton extends StatelessWidget {
           heroTag: null,
           tooltip: 'Pesquisar',
           onPressed: onPressed,
+          shape: const CircleBorder(
+            side: BorderSide(color: Color(0x33FFFFFF)),
+          ),
           backgroundColor: const Color(0xF21B2029),
           foregroundColor: const Color(0xFFB7F34A),
           child: const Icon(Icons.search_rounded),
@@ -586,6 +662,10 @@ class _EventFiltersButton extends StatelessWidget {
                 ? Colors.white
                 : const Color(0xFFB7F34A),
             elevation: 5,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0x33FFFFFF)),
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           ),
         ),
@@ -603,9 +683,10 @@ class _NoFilteredEvents extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: Color(0xF21B2029),
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+        decoration: BoxDecoration(
+          color: const Color(0xF21B2029),
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          border: Border.all(color: const Color(0x33FFFFFF)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -641,15 +722,19 @@ class _SearchThisAreaButton extends StatelessWidget {
       child: Align(
         alignment: Alignment.topCenter,
         child: FilledButton.icon(
-          key: const Key('search-this-area'),
+          key: const Key('search-this-area-button'),
           onPressed: onPressed,
-          icon: const Icon(Icons.refresh_rounded, size: 18),
+          icon: const Icon(Icons.refresh_rounded, size: 16),
           label: const Text('Pesquisar nesta área'),
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xF21B2029),
-            foregroundColor: Colors.white,
-            elevation: 5,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            foregroundColor: const Color(0xFFB7F34A),
+            elevation: 6,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0x33FFFFFF)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
         ),
       ),
@@ -673,9 +758,6 @@ class _CenterOnUserButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLoading = status == UserLocationStatus.loading;
-    final isDenied =
-        status == UserLocationStatus.permissionDenied ||
-        status == UserLocationStatus.permissionDeniedForever;
     return SafeArea(
       minimum: EdgeInsets.only(right: 16, bottom: bottomInset),
       child: Align(
@@ -685,6 +767,9 @@ class _CenterOnUserButton extends StatelessWidget {
           heroTag: null,
           tooltip: 'Centrar em mim',
           onPressed: isLoading ? null : onPressed,
+          shape: const CircleBorder(
+            side: BorderSide(color: Color(0x33FFFFFF)),
+          ),
           backgroundColor: isActive
               ? lotusQualityAccent
               : const Color(0xF21B2029),
@@ -702,9 +787,9 @@ class _CenterOnUserButton extends StatelessWidget {
                   ),
                 )
               : Icon(
-                  isDenied
-                      ? Icons.location_disabled_rounded
-                      : Icons.my_location_rounded,
+                  isActive
+                      ? Icons.my_location_rounded
+                      : Icons.location_searching_rounded,
                 ),
         ),
       ),
@@ -717,21 +802,16 @@ class _MapLoadingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      liveRegion: true,
-      label: 'A atualizar eventos no mapa',
-      child: const ExcludeSemantics(
-        child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                color: Color(0xFFB7F34A),
-                backgroundColor: Color(0x33000000),
-              ),
-            ),
+    return const Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: EdgeInsets.only(top: 72),
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: Color(0xFFB7F34A),
           ),
         ),
       ),
@@ -750,41 +830,42 @@ class _MapErrorIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              color: Color(0xE61B2029),
-              borderRadius: BorderRadius.all(Radius.circular(12)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-              child: Semantics(
-                liveRegion: true,
-                label: hasCachedEvents
-                    ? 'Sem ligação. A mostrar os últimos eventos guardados.'
-                    : 'Não foi possível carregar os eventos.',
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        hasCachedEvents
-                            ? 'Offline · a mostrar dados guardados'
-                            : 'Não foi possível carregar os eventos',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: onRetry,
-                      child: const Text('Repetir'),
-                    ),
-                  ],
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+        child: Material(
+          color: const Color(0xF21B2029),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.signal_wifi_off_outlined,
+                  color: Color(0xFFFF6B5E),
+                  size: 20,
                 ),
-              ),
+                const SizedBox(width: 10),
+                Text(
+                  hasCachedEvents
+                      ? 'A usar eventos guardados'
+                      : 'Não foi possível carregar eventos',
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: onRetry,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFB7F34A),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Tentar de novo'),
+                ),
+              ],
             ),
           ),
         ),
@@ -807,16 +888,25 @@ class _NoEventsInArea extends StatelessWidget {
         child: Material(
           color: const Color(0xF21B2029),
           borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            width: 320,
-            child: LotusStateView(
-              compact: true,
-              kind: LotusStateKind.empty,
-              icon: Icons.location_off_outlined,
-              title: 'Sem eventos nesta área',
-              message: 'Move o mapa ou volta a pesquisar mais tarde.',
-              actionLabel: 'Pesquisar novamente',
-              onAction: onRetry,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Nenhum evento encontrado nesta área.',
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Tentar de novo'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFB7F34A),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -824,3 +914,98 @@ class _NoEventsInArea extends StatelessWidget {
     );
   }
 }
+
+class _EventsInAreaSheet extends StatelessWidget {
+  const _EventsInAreaSheet({
+    required this.title,
+    required this.events,
+    required this.favoriteIds,
+    required this.onToggleFavorite,
+    required this.onSelectEvent,
+    required this.onOpenDetails,
+  });
+
+  final String title;
+  final List<Event> events;
+  final Set<String> favoriteIds;
+  final ValueChanged<Event> onToggleFavorite;
+  final ValueChanged<Event> onSelectEvent;
+  final ValueChanged<Event> onOpenDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF151B23),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(
+          top: BorderSide(color: Color(0xFF293342)),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.65,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag indicator bar
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: const Color(0x4DFFFFFF),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: events.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final event = events[index];
+                final isFav = favoriteIds.contains(event.id);
+                return LotusEventListTile(
+                  event: event,
+                  onTap: () => onOpenDetails(event),
+                  trailing: IconButton(
+                    icon: Icon(
+                      isFav
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: isFav
+                          ? const Color(0xFFFF5252)
+                          : const Color(0xFF9AA8B9),
+                    ),
+                    onPressed: () => onToggleFavorite(event),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

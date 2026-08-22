@@ -1,5 +1,7 @@
 enum EventDateFilter { today, tomorrow, thisWeekend }
 
+enum EventSortBy { date, proximity, popularity }
+
 /// User-selected constraints applied to events already loaded for a viewport.
 final class EventFilters {
   EventFilters({
@@ -8,6 +10,7 @@ final class EventFilters {
     this.freeOnly = false,
     this.maximumDistanceMeters,
     this.maximumPriceMinorUnits,
+    this.sortBy,
   }) : categoryIds = Set.unmodifiable(
          categoryIds
              .map(canonicalFilterValue)
@@ -36,6 +39,7 @@ final class EventFilters {
   final bool freeOnly;
   final double? maximumDistanceMeters;
   final int? maximumPriceMinorUnits;
+  final EventSortBy? sortBy;
 
   bool get isEmpty => activeCount == 0;
 
@@ -44,7 +48,8 @@ final class EventFilters {
       categoryIds.length +
       (freeOnly ? 1 : 0) +
       (maximumDistanceMeters == null ? 0 : 1) +
-      (maximumPriceMinorUnits == null ? 0 : 1);
+      (maximumPriceMinorUnits == null ? 0 : 1) +
+      (sortBy == null ? 0 : 1);
 }
 
 /// Produces stable filter keys across accented labels and legacy category ids.

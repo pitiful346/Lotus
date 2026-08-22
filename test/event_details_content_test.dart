@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:lotus/custom_code/widgets/event_details_content.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('pt_PT', null);
+  });
   testWidgets('complete event details expose actions and real metadata', (
     tester,
   ) async {
@@ -74,6 +78,143 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('cancelled event displays cancellation banner and disabled action', (
+    tester,
+  ) async {
+    final cancelled = _event(status: EventStatus.cancelled);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDetailsContent(
+          event: cancelled,
+          isFavorite: false,
+          onBack: () {},
+          onShare: () {},
+          onToggleFavorite: () {},
+          onOpenTickets: () {},
+        ),
+      ),
+    );
+
+    expect(
+      find.text('Este evento foi cancelado pela organização.'),
+      findsOneWidget,
+    );
+    expect(find.text('Evento cancelado'), findsOneWidget);
+    final button = tester.widget<FilledButton>(
+      find.byKey(const Key('event-ticket-cta')),
+    );
+    expect(find.text('Cancelado'), findsOneWidget);
+    expect(button.onPressed, isNull);
+  });
+
+  testWidgets('tapping organizer invokes onTapOrganizer', (tester) async {
+    var organizerTapped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EventDetailsContent(
+            event: _event(),
+            isFavorite: false,
+            onBack: () {},
+            onShare: () {},
+            onToggleFavorite: () {},
+            onTapOrganizer: () => organizerTapped = true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(find.text('Lotus Collective'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lotus Collective'));
+    expect(organizerTapped, isTrue);
+  });
+
+  testWidgets('renders artists lineup section when available', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final eventWithArtists = _event(artists: ['DJ Vibe', 'Amelie Lens']);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDetailsContent(
+          event: eventWithArtists,
+          isFavorite: false,
+          onBack: () {},
+          onShare: () {},
+          onToggleFavorite: () {},
+          onOpenTickets: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Artistas / Lineup'), findsOneWidget);
+    expect(find.text('DJ Vibe'), findsOneWidget);
+    expect(find.text('Amelie Lens'), findsOneWidget);
+  });
+
+  testWidgets('omits organizer section completely when organizer is null', (
+    tester,
+  ) async {
+    final eventWithoutOrg = _event(organizer: null);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDetailsContent(
+          event: eventWithoutOrg,
+          isFavorite: false,
+          onBack: () {},
+          onShare: () {},
+          onToggleFavorite: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Organização'), findsNothing);
+    expect(find.text('Organizador não indicado'), findsNothing);
+  });
+
+  testWidgets('renders minimum age pill when minimumAge is provided', (
+    tester,
+  ) async {
+    final eventWithAge = _event(minimumAge: 18);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDetailsContent(
+          event: eventWithAge,
+          isFavorite: false,
+          onBack: () {},
+          onShare: () {},
+          onToggleFavorite: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('+18 anos'), findsOneWidget);
+  });
+
+  testWidgets('directions button triggers onOpenDirections', (tester) async {
+    var directionsOpened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventDetailsContent(
+          event: _event(),
+          isFavorite: false,
+          onBack: () {},
+          onShare: () {},
+          onToggleFavorite: () {},
+          onOpenDirections: () => directionsOpened = true,
+        ),
+      ),
+    );
+
+    final directionsButton = find.text('Ver no mapa / Como chegar');
+    expect(directionsButton, findsOneWidget);
+    await tester.ensureVisible(directionsButton);
+    await tester.pumpAndSettle();
+    await tester.tap(directionsButton);
+    expect(directionsOpened, isTrue);
+  });
+
   test('price formatter handles free and ranged prices', () {
     expect(formatEventPrice(EventPrice.free()), 'Grátis');
     expect(
@@ -89,8 +230,14 @@ void main() {
   });
 }
 
+const _defaultOrganizerSentinel = Object();
+
 Event _event({
   TicketAvailability ticketAvailability = TicketAvailability.available,
+  EventStatus status = EventStatus.published,
+  Iterable<String> artists = const [],
+  Object? organizer = _defaultOrganizerSentinel,
+  int? minimumAge,
 }) {
   return Event(
     id: 'events/lotus-night',
@@ -105,13 +252,18 @@ Event _event({
     startsAt: DateTime.utc(2026, 9, 10, 20),
     endsAt: DateTime.utc(2026, 9, 10, 23),
     price: EventPrice(currencyCode: 'EUR', minimumMinorUnits: 1250),
-    organizer: EventOrganizer(id: 'users/lotus', name: 'Lotus Collective'),
+    organizer: identical(organizer, _defaultOrganizerSentinel)
+        ? EventOrganizer(id: 'users/lotus', name: 'Lotus Collective')
+        : (organizer as EventOrganizer?),
     links: [
       EventLink(
         kind: EventLinkKind.tickets,
         uri: Uri.parse('https://tickets.example.com/lotus-night'),
       ),
     ],
+    status: status,
+    artists: artists,
+    minimumAge: minimumAge,
     ticketAvailability: ticketAvailability,
   );
 }

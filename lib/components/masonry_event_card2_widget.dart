@@ -1,5 +1,6 @@
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/backend.dart';
+import '/custom_code/event_mapping/firestore_favorite_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'dart:ui';
@@ -115,13 +116,15 @@ class _MasonryEventCard2WidgetState extends State<MasonryEventCard2Widget> {
                             hoverColor: Colors.transparent,
                             highlightColor: Colors.transparent,
                             onTap: () async {
-                              await currentUserReference!.update({
-                                ...mapToFirestore(
-                                  {
-                                    'favoritos': FieldValue.delete(),
-                                  },
-                                ),
-                              });
+                              final ref = widget.eventoRef;
+                              if (ref == null || currentUserUid.isEmpty) return;
+                              final isFav = (currentUserDocument?.favoritos.toList() ?? [])
+                                  .contains(ref);
+                              await FirestoreFavoriteRepository().setFavorite(
+                                userId: currentUserUid,
+                                eventId: ref.path,
+                                isFavorite: !isFav,
+                              );
                             },
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(

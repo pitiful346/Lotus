@@ -36,10 +36,14 @@ final class FirebaseLotusAuthService implements LotusAuthService {
   Future<void> signIn({required String email, required String password}) async {
     await _preparePersistence();
     try {
-      await _auth.signInWithEmailAndPassword(
+      final credential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
+      final user = credential.user ?? _auth.currentUser;
+      if (user != null) {
+        await maybeCreateUser(user);
+      }
     } on FirebaseAuthException catch (error) {
       throw LotusAuthFailure(_messageFor(error));
     }

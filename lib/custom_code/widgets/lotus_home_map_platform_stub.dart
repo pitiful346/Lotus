@@ -6,13 +6,15 @@ bool get isLotusHomeMapSupported => false;
 Widget buildLotusHomeMap({
   required List<Event> events,
   required ValueChanged<String> onEventTap,
-  required VoidCallback onMapTapEmpty,
+  VoidCallback? onMapTapEmpty,
   required ValueChanged<MapViewportBounds> onViewportChanged,
-  required VoidCallback onUserMapGesture,
-  required String? selectedEventId,
+  VoidCallback? onUserMapGesture,
+  String? selectedEventId,
   required GeoCoordinates? userCoordinates,
   required int centerOnUserRequest,
   required GeoCoordinates initialCenter,
+  ValueChanged<List<String>>? onStackedEventsTap,
+  ValueChanged<GeoCoordinates>? onClusterTapArea,
 }) => const _UnsupportedMapView();
 
 class _UnsupportedMapView extends StatelessWidget {

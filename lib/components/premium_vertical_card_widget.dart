@@ -1,5 +1,6 @@
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/backend.dart';
+import '/custom_code/event_mapping/firestore_favorite_repository.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'dart:ui';
@@ -100,19 +101,34 @@ class _PremiumVerticalCardWidgetState extends State<PremiumVerticalCardWidget> {
                               ),
                               alignment: AlignmentDirectional(0.0, 0.0),
                               child: AuthUserStreamWidget(
-                                builder: (context) => Icon(
-                                  Icons.favorite_border_rounded,
-                                  color: valueOrDefault<Color>(
-                                    (currentUserDocument?.favoritos.toList() ??
-                                                [])
-                                            .contains(
-                                                widget.eventoDoc?.reference)
-                                        ? FlutterFlowTheme.of(context).error
-                                        : Colors.white,
-                                    Colors.white,
-                                  ),
-                                  size: 18.0,
-                                ),
+                                builder: (context) {
+                                  final isFav = (currentUserDocument?.favoritos.toList() ?? [])
+                                      .contains(widget.eventoDoc?.reference);
+                                  return InkWell(
+                                    splashColor: Colors.transparent,
+                                    focusColor: Colors.transparent,
+                                    hoverColor: Colors.transparent,
+                                    highlightColor: Colors.transparent,
+                                    onTap: () async {
+                                      final doc = widget.eventoDoc;
+                                      if (doc == null || currentUserUid.isEmpty) return;
+                                      await FirestoreFavoriteRepository().setFavorite(
+                                        userId: currentUserUid,
+                                        eventId: doc.reference.path,
+                                        isFavorite: !isFav,
+                                      );
+                                    },
+                                    child: Icon(
+                                      isFav
+                                          ? Icons.favorite_rounded
+                                          : Icons.favorite_border_rounded,
+                                      color: isFav
+                                          ? FlutterFlowTheme.of(context).error
+                                          : Colors.white,
+                                      size: 18.0,
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),

@@ -8,6 +8,9 @@ import '/auth/base_auth_user_provider.dart';
 import '/custom_code/auth/lotus_app_entry.dart';
 import '/custom_code/auth/lotus_auth_screen.dart';
 import '/custom_code/onboarding/lotus_onboarding_gate.dart';
+import '/custom_code/widgets/lotus_admin_screen.dart';
+import '/custom_code/widgets/lotus_notification_center_screen.dart';
+import '/custom_code/widgets/lotus_radar_screen.dart';
 
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
@@ -114,6 +117,40 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           ),
         ),
         FFRoute(
+          name: 'EventDetailsDeepLink',
+          path: '/event/:eventoAtual',
+          requireAuth: false,
+          asyncParams: {
+            'eventoAtual': getDoc(['events'], EventsRecord.fromSnapshot),
+          },
+          builder: (context, params) => EventDetailsWidget(
+            eventoAtual: params.getParam(
+              'eventoAtual',
+              ParamType.Document,
+            ),
+          ),
+        ),
+        FFRoute(
+          name: 'EventDetailsShortLink',
+          path: '/e/:eventoAtual',
+          requireAuth: false,
+          asyncParams: {
+            'eventoAtual': getDoc(['events'], EventsRecord.fromSnapshot),
+          },
+          builder: (context, params) => EventDetailsWidget(
+            eventoAtual: params.getParam(
+              'eventoAtual',
+              ParamType.Document,
+            ),
+          ),
+        ),
+        FFRoute(
+          name: 'TeaserDeepLink',
+          path: '/teaser/:id',
+          requireAuth: false,
+          builder: (context, params) => const LotusRadarScreen(),
+        ),
+        FFRoute(
           name: NewScreen3Widget.routeName,
           path: NewScreen3Widget.routePath,
           requireAuth: true,
@@ -130,6 +167,24 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           path: SearchWidget.routePath,
           requireAuth: true,
           builder: (context, params) => SearchWidget(),
+        ),
+        FFRoute(
+          name: LotusRadarScreen.routeName,
+          path: LotusRadarScreen.routePath,
+          requireAuth: true,
+          builder: (context, params) => const LotusRadarScreen(),
+        ),
+        FFRoute(
+          name: LotusNotificationCenterScreen.routeName,
+          path: LotusNotificationCenterScreen.routePath,
+          requireAuth: true,
+          builder: (context, params) => const LotusNotificationCenterScreen(),
+        ),
+        FFRoute(
+          name: LotusAdminScreen.routeName,
+          path: LotusAdminScreen.routePath,
+          requireAuth: true,
+          builder: (context, params) => const LotusAdminScreen(),
         ),
         FFRoute(
           name: FilterWidget.routeName,

@@ -113,9 +113,12 @@ final class FirebaseNotificationCoordinator {
         .get();
     final data = preference.data();
     final optedIn =
+        data?['followed_promoters'] == true ||
+        data?['radar_reveals'] == true ||
         data?['favorite_event_updates'] == true ||
         data?['upcoming_favorite_events'] == true ||
-        data?['recommendations'] == true;
+        data?['recommendations'] == true ||
+        data?['marketing'] == true;
     if (!optedIn) return;
 
     final settings = await FirebaseMessaging.instance.getNotificationSettings();

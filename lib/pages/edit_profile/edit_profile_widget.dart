@@ -1687,29 +1687,16 @@ class _EditProfileWidgetState extends State<EditProfileWidget> {
                                               .labelMedium
                                               .override(
                                                 font: GoogleFonts.poppins(
-                                                  fontWeight:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .labelMedium
-                                                          .fontWeight,
+                                                  fontWeight: FontWeight.w800,
                                                   fontStyle:
                                                       FlutterFlowTheme.of(
                                                               context)
                                                           .labelMedium
                                                           .fontStyle,
                                                 ),
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primaryBackground,
+                                                color: const Color(0xFF11161D),
                                                 letterSpacing: 0.0,
-                                                fontWeight:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontWeight,
-                                                fontStyle:
-                                                    FlutterFlowTheme.of(context)
-                                                        .labelMedium
-                                                        .fontStyle,
+                                                fontWeight: FontWeight.w800,
                                               ),
                                         ),
                                         Container(

@@ -22,6 +22,7 @@ class EventDetailsContent extends StatelessWidget {
     this.isUpdatingFavorite = false,
     this.onOpenDirections,
     this.onOpenTickets,
+    this.onTapOrganizer,
   });
 
   final Event event;
@@ -32,12 +33,30 @@ class EventDetailsContent extends StatelessWidget {
   final VoidCallback onToggleFavorite;
   final VoidCallback? onOpenDirections;
   final VoidCallback? onOpenTickets;
+  final VoidCallback? onTapOrganizer;
 
   @override
   Widget build(BuildContext context) {
+    final showTicketsBar = event.hasTickets ||
+        event.price.isFree ||
+        event.price.minimumMinorUnits != null;
+
+    final hasLocation = (event.location.displayName.isNotEmpty &&
+            event.location.displayName != 'Localização não indicada') ||
+        event.location.coordinates != null ||
+        event.location.venueName != null;
+
+    final hasDescription = event.description.trim().isNotEmpty &&
+        event.description.trim() != 'Descrição não disponível.';
+
+    final hasPriceOrTickets = event.price.minimumMinorUnits != null ||
+        event.price.isFree ||
+        event.hasTickets ||
+        event.ticketAvailability != TicketAvailability.unknown;
+
     return Scaffold(
       backgroundColor: _background,
-      bottomNavigationBar: event.hasTickets
+      bottomNavigationBar: showTicketsBar
           ? _TicketBar(event: event, onOpenTickets: onOpenTickets)
           : null,
       body: CustomScrollView(
@@ -89,11 +108,49 @@ class EventDetailsContent extends StatelessWidget {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: event.categories
-                            .map((category) => _Pill(label: category.label))
-                            .toList(growable: false),
+                        children: [
+                          for (final category in event.categories)
+                            _Pill(label: category.label),
+                          if (event.minimumAge != null && event.minimumAge! > 0)
+                            _AgePill(minimumAge: event.minimumAge!),
+                        ],
                       ),
                       const SizedBox(height: 16),
+                      if (event.status == EventStatus.cancelled) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0x29FF5252),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFFF5252)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.cancel_outlined,
+                                color: Color(0xFFFF5252),
+                                size: 22,
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Este evento foi cancelado pela organização.',
+                                  style: TextStyle(
+                                    color: Color(0xFFFF5252),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       Semantics(
                         header: true,
                         child: Text(
@@ -108,33 +165,54 @@ class EventDetailsContent extends StatelessWidget {
                       ),
                       const SizedBox(height: 18),
                       _EventSchedule(event: event),
-                      const SizedBox(height: 28),
-                      _Section(
-                        title: 'Localização',
-                        child: _LocationCard(
-                          event: event,
-                          onOpenDirections: onOpenDirections,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      _Section(
-                        title: 'Sobre o evento',
-                        child: SelectableText(
-                          event.description,
-                          style: const TextStyle(
-                            color: Color(0xFFD5DCE5),
-                            fontSize: 16,
-                            height: 1.55,
+                      if (hasLocation) ...[
+                        const SizedBox(height: 28),
+                        _Section(
+                          title: 'Localização',
+                          child: _LocationCard(
+                            event: event,
+                            onOpenDirections: onOpenDirections,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 28),
-                      _Section(
-                        title: 'Organização',
-                        child: _OrganizerCard(organizer: event.organizer),
-                      ),
-                      const SizedBox(height: 28),
-                      _PriceAndAvailability(event: event),
+                      ],
+                      if (hasDescription) ...[
+                        const SizedBox(height: 28),
+                        _Section(
+                          title: 'Sobre o evento',
+                          child: SelectableText(
+                            event.description,
+                            style: const TextStyle(
+                              color: Color(0xFFD5DCE5),
+                              fontSize: 16,
+                              height: 1.55,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (event.artists.isNotEmpty) ...[
+                        const SizedBox(height: 28),
+                        _Section(
+                          title: 'Artistas / Lineup',
+                          child: _ArtistsSection(artists: event.artists),
+                        ),
+                      ],
+                      if (event.organizer != null) ...[
+                        const SizedBox(height: 28),
+                        _Section(
+                          title: 'Organização',
+                          child: _OrganizerCard(
+                            organizer: event.organizer!,
+                            onTap: onTapOrganizer,
+                          ),
+                        ),
+                      ],
+                      if (hasPriceOrTickets) ...[
+                        const SizedBox(height: 28),
+                        _PriceAndAvailability(
+                          event: event,
+                          onOpenTickets: onOpenTickets,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -280,6 +358,34 @@ class _Pill extends StatelessWidget {
   }
 }
 
+class _AgePill extends StatelessWidget {
+  const _AgePill({required this.minimumAge});
+
+  final int minimumAge;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0x1F9AA8B9),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0x4D9AA8B9)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          '+$minimumAge anos',
+          style: const TextStyle(
+            color: Color(0xFFE2E8F0),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EventSchedule extends StatelessWidget {
   const _EventSchedule({required this.event});
 
@@ -287,32 +393,43 @@ class _EventSchedule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final localizations = MaterialLocalizations.of(context);
     final start = event.startsAt.toLocal();
     final end = event.endsAt?.toLocal();
-    final date = localizations.formatFullDate(start);
-    final startTime = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(start),
-    );
-    final endTime = end == null
-        ? null
-        : localizations.formatTimeOfDay(TimeOfDay.fromDateTime(end));
-    final isSameDay =
-        end != null &&
+
+    final dateRaw =
+        DateFormat("EEEE, d 'de' MMMM 'de' y", 'pt_PT').format(start);
+    final date = _capitalize(dateRaw);
+
+    final startTime = DateFormat('HH:mm', 'pt_PT').format(start);
+    final endTime =
+        end == null ? null : DateFormat('HH:mm', 'pt_PT').format(end);
+
+    final isSameDay = end != null &&
         start.year == end.year &&
         start.month == end.month &&
         start.day == end.day;
 
+    final String subtitle;
+    if (end == null) {
+      subtitle = startTime;
+    } else if (isSameDay) {
+      subtitle = '$startTime – $endTime';
+    } else {
+      final endDateRaw = DateFormat("d 'de' MMMM", 'pt_PT').format(end);
+      subtitle = '$startTime – $endDateRaw, $endTime';
+    }
+
     return _InfoRow(
       icon: Icons.calendar_month_rounded,
       title: date,
-      subtitle: end == null
-          ? startTime
-          : isSameDay
-          ? '$startTime – $endTime'
-          : '$startTime – ${localizations.formatMediumDate(end)}, $endTime',
+      subtitle: subtitle,
     );
   }
+}
+
+String _capitalize(String text) {
+  if (text.isEmpty) return text;
+  return '${text[0].toUpperCase()}${text.substring(1)}';
 }
 
 class _InfoRow extends StatelessWidget {
@@ -407,38 +524,66 @@ class _LocationCard extends StatelessWidget {
     final showBoth = venue != null && venue != displayName;
 
     return _SurfaceCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.location_on_rounded, color: _accent, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  venue ?? displayName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+          Row(
+            children: [
+              const Icon(Icons.location_on_rounded, color: _accent, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      venue ?? displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (showBoth) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        displayName,
+                        style: const TextStyle(color: _muted, fontSize: 14),
+                      ),
+                    ],
+                  ],
                 ),
-                if (showBoth) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    displayName,
-                    style: const TextStyle(color: _muted, fontSize: 14),
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
           if (onOpenDirections != null) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Abrir direções',
-              onPressed: onOpenDirections,
-              icon: const Icon(Icons.directions_rounded, color: _accent),
+            const SizedBox(height: 12),
+            const Divider(color: _surfaceBorder, height: 1),
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: onOpenDirections,
+              borderRadius: BorderRadius.circular(10),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.directions_rounded, color: _accent, size: 18),
+                    SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Ver no mapa / Como chegar',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ],
@@ -448,29 +593,44 @@ class _LocationCard extends StatelessWidget {
 }
 
 class _OrganizerCard extends StatelessWidget {
-  const _OrganizerCard({required this.organizer});
+  const _OrganizerCard({required this.organizer, this.onTap});
 
-  final EventOrganizer? organizer;
+  final EventOrganizer organizer;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final value = organizer;
     return _SurfaceCard(
+      onTap: onTap,
       child: Row(
         children: [
-          _OrganizerAvatar(organizer: value),
+          _OrganizerAvatar(organizer: organizer),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  value?.name ?? 'Organizador não indicado',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        organizer.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (organizer.isVerified) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.verified_rounded,
+                        color: _accent,
+                        size: 16,
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 3),
                 const Text(
@@ -480,6 +640,12 @@ class _OrganizerCard extends StatelessWidget {
               ],
             ),
           ),
+          if (onTap != null)
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: _muted,
+              size: 22,
+            ),
         ],
       ),
     );
@@ -489,69 +655,125 @@ class _OrganizerCard extends StatelessWidget {
 class _OrganizerAvatar extends StatelessWidget {
   const _OrganizerAvatar({required this.organizer});
 
-  final EventOrganizer? organizer;
+  final EventOrganizer organizer;
 
   @override
   Widget build(BuildContext context) {
-    final imageUri = organizer?.imageUri;
-    final initial = organizer?.name.characters.first.toUpperCase() ?? 'L';
-    return CircleAvatar(
-      radius: 26,
-      backgroundColor: const Color(0xFF2B3542),
-      backgroundImage: imageUri == null
-          ? null
-          : CachedNetworkImageProvider(imageUri.toString()),
-      child: imageUri == null
-          ? Text(
-              initial,
-              style: const TextStyle(
-                color: _accent,
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-              ),
+    final imageUri = organizer.imageUri;
+    final initial = organizer.name.isNotEmpty
+        ? organizer.name.characters.first.toUpperCase()
+        : 'L';
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _surfaceBorder, width: 1.5),
+        color: const Color(0xFF2B3542),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: imageUri != null
+          ? CachedNetworkImage(
+              imageUrl: imageUri.toString(),
+              fit: BoxFit.cover,
+              placeholder: (_, __) => _fallback(initial),
+              errorWidget: (_, __, ___) => _fallback(initial),
             )
-          : null,
+          : _fallback(initial),
     );
   }
+
+  Widget _fallback(String initial) => Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: _accent,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
 }
 
 class _PriceAndAvailability extends StatelessWidget {
-  const _PriceAndAvailability({required this.event});
+  const _PriceAndAvailability({
+    required this.event,
+    this.onOpenTickets,
+  });
 
   final Event event;
+  final VoidCallback? onOpenTickets;
 
   @override
   Widget build(BuildContext context) {
+    final isCancelled = event.status == EventStatus.cancelled;
+    final availabilityLabel = isCancelled
+        ? 'Evento cancelado'
+        : ticketAvailabilityLabel(event.ticketAvailability);
+    final availabilityColor = isCancelled
+        ? const Color(0xFFFF5252)
+        : _availabilityColor(event.ticketAvailability);
+
     return _SurfaceCard(
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.confirmation_number_rounded, color: _accent),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  formatEventPrice(event.price),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.confirmation_number_rounded, color: _accent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      formatEventPrice(event.price),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      availabilityLabel,
+                      style: TextStyle(
+                        color: availabilityColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (event.hasTickets && onOpenTickets != null && !isCancelled) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onOpenTickets,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: const Color(0xFF10150B),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: Text(
+                  event.isFree ? 'Reservar entrada' : 'Comprar bilhete',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  ticketAvailabilityLabel(event.ticketAvailability),
-                  style: TextStyle(
-                    color: _availabilityColor(event.ticketAvailability),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -559,19 +781,24 @@ class _PriceAndAvailability extends StatelessWidget {
 }
 
 class _SurfaceCard extends StatelessWidget {
-  const _SurfaceCard({required this.child});
+  const _SurfaceCard({required this.child, this.onTap});
 
   final Widget child;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: _surface,
+    return Material(
+      color: _surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _surfaceBorder),
+        side: const BorderSide(color: _surfaceBorder),
       ),
-      child: Padding(padding: const EdgeInsets.all(16), child: child),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(padding: const EdgeInsets.all(16), child: child),
+      ),
     );
   }
 }
@@ -584,7 +811,7 @@ class _TicketBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isUnavailable =
+    final isUnavailable = event.status == EventStatus.cancelled ||
         event.ticketAvailability == TicketAvailability.soldOut ||
         event.ticketAvailability == TicketAvailability.unavailable;
     return DecoratedBox(
@@ -629,12 +856,21 @@ class _TicketBar extends StatelessWidget {
                 disabledBackgroundColor: const Color(0xFF47513B),
                 disabledForegroundColor: const Color(0xFFB8C1AA),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
               icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: Text(_ticketActionLabel(event, isUnavailable)),
+              label: Text(
+                _ticketActionLabel(event, isUnavailable),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ],
         ),
@@ -644,6 +880,9 @@ class _TicketBar extends StatelessWidget {
 }
 
 String _ticketActionLabel(Event event, bool isUnavailable) {
+  if (event.status == EventStatus.cancelled) {
+    return 'Cancelado';
+  }
   if (event.ticketAvailability == TicketAvailability.soldOut) {
     return 'Esgotado';
   }
@@ -696,4 +935,44 @@ Color _availabilityColor(TicketAvailability availability) {
     TicketAvailability.unavailable => const Color(0xFFFF7A7A),
     TicketAvailability.unknown => _muted,
   };
+}
+
+class _ArtistsSection extends StatelessWidget {
+  const _ArtistsSection({required this.artists});
+
+  final List<String> artists;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final artist in artists)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _surfaceBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.music_note_rounded, color: _accent, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  artist,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
 }

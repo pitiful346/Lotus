@@ -4,6 +4,26 @@ import 'package:lotus/custom_code/widgets/lotus_favorites_tab.dart';
 import 'package:lotus_core/lotus_core.dart';
 
 void main() {
+  testWidgets('unauthenticated user sees prompt to log in', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: LotusFavoritesTab(
+          userId: '',
+          favoriteRepository: _FavoritesRepository({}),
+          eventsLoader: const _FavoriteLoader([]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inicia sessão'), findsOneWidget);
+    expect(
+      find.text('Entra na tua conta para veres eventos guardados.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('favorites has a useful empty state', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -51,6 +71,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.removedEventId, 'events/upcoming');
   });
+
+  testWidgets('cancelled favorite displays cancelled status tag', (tester) async {
+    final repository = _FavoritesRepository({'events/cancelled'});
+    final event = Event(
+      id: 'events/cancelled',
+      title: 'Festival de Verão',
+      description: 'Descrição',
+      status: EventStatus.cancelled,
+      categories: [EventCategory(id: 'musica', label: 'Música')],
+      location: EventLocation(displayName: 'Lisboa'),
+      startsAt: DateTime.utc(2026, 9, 1),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: LotusFavoritesTab(
+          userId: 'user-1',
+          favoriteRepository: repository,
+          eventsLoader: _FavoriteLoader([event]),
+          now: () => DateTime.utc(2026, 8, 18),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Festival de Verão'), findsOneWidget);
+    expect(find.text('Cancelado'), findsOneWidget);
+  });
+
+  testWidgets('error in stream shows offline unavailable state', (tester) async {
+    final repository = _ErrorFavoritesRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: LotusFavoritesTab(
+          userId: 'user-1',
+          favoriteRepository: repository,
+          eventsLoader: const _FavoriteLoader([]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Favoritos indisponíveis'), findsOneWidget);
+  });
 }
 
 final class _FavoritesRepository implements FavoriteRepository {
@@ -78,6 +143,25 @@ final class _FavoritesRepository implements FavoriteRepository {
     required String userId,
     required String eventId,
   }) => Stream.value(ids.contains(eventId));
+}
+
+final class _ErrorFavoritesRepository implements FavoriteRepository {
+  @override
+  Future<void> setFavorite({
+    required String userId,
+    required String eventId,
+    required bool isFavorite,
+  }) async {}
+
+  @override
+  Stream<Set<String>> watchFavoriteEventIds(String userId) =>
+      Stream.error(Exception('Network error'));
+
+  @override
+  Stream<bool> watchIsFavorite({
+    required String userId,
+    required String eventId,
+  }) => Stream.error(Exception('Network error'));
 }
 
 final class _FavoriteLoader implements FavoriteEventsLoader {

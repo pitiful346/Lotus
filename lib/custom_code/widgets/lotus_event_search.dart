@@ -329,7 +329,15 @@ class _LotusEventSearchState extends State<LotusEventSearch> {
                   fillColor: _surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
+                    borderSide: const BorderSide(color: Color(0xFF293342)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF293342)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: _accent, width: 1.5),
                   ),
                 ),
               ),
@@ -437,13 +445,13 @@ class _SearchIntroduction extends StatelessWidget {
             Text(
               'Pesquisa por evento, local, artista, organizador ou categoria.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF9AA8B8)),
+              style: TextStyle(color: Color(0xFF94A3B8)),
             ),
             SizedBox(height: 6),
             Text(
               'Também podes escrever: “quero techno amanhã à noite no Porto”.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF778698)),
+              style: TextStyle(color: Color(0xFF94A3B8)),
             ),
           ],
         ),
@@ -463,7 +471,22 @@ class _SearchIntroduction extends StatelessWidget {
               'Música no Porto',
               'Eventos gratuitos',
             ])
-              ActionChip(label: Text(query), onPressed: () => onSelect(query)),
+              ActionChip(
+                label: Text(
+                  query,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                backgroundColor: _surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: const BorderSide(color: Color(0xFF293342)),
+                ),
+                onPressed: () => onSelect(query),
+              ),
           ],
         ),
         if (history.isNotEmpty) ...[
@@ -489,9 +512,22 @@ class _SearchIntroduction extends StatelessWidget {
           for (final query in history)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history_rounded),
-              title: Text(query),
-              trailing: const Icon(Icons.north_west_rounded, size: 18),
+              leading: const Icon(
+                Icons.history_rounded,
+                color: Color(0xFF94A3B8),
+              ),
+              title: Text(
+                query,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              trailing: const Icon(
+                Icons.north_west_rounded,
+                size: 18,
+                color: Color(0xFF94A3B8),
+              ),
               onTap: () => onSelect(query),
             ),
         ],
@@ -630,6 +666,10 @@ class _EventRow extends StatelessWidget {
         child: Card(
           color: _surface,
           margin: const EdgeInsets.only(bottom: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0xFF293342)),
+          ),
           child: ListTile(
             onTap: onTap,
             leading: ClipRRect(
@@ -670,11 +710,11 @@ class _EventRow extends StatelessWidget {
               '${event.location.displayName} · ${_shortDate(event.startsAt)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF9AA8B8)),
+              style: const TextStyle(color: Color(0xFF94A3B8)),
             ),
             trailing: const Icon(
               Icons.chevron_right_rounded,
-              color: Colors.white54,
+              color: Color(0xFF94A3B8),
             ),
           ),
         ),
@@ -705,6 +745,10 @@ class _FacetRow extends StatelessWidget {
       child: Card(
         color: _surface,
         margin: const EdgeInsets.only(bottom: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFF293342)),
+        ),
         child: ExcludeSemantics(
           child: ListTile(
             onTap: onTap,
@@ -722,11 +766,11 @@ class _FacetRow extends StatelessWidget {
             ),
             subtitle: Text(
               count == 1 ? '1 evento' : '$count eventos',
-              style: const TextStyle(color: Color(0xFF9AA8B8)),
+              style: const TextStyle(color: Color(0xFF94A3B8)),
             ),
             trailing: const Icon(
               Icons.chevron_right_rounded,
-              color: Colors.white54,
+              color: Color(0xFF94A3B8),
             ),
           ),
         ),

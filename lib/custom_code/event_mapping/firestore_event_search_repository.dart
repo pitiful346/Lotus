@@ -54,7 +54,8 @@ final class FirestoreEventSearchRepository implements EventSearchRepository {
                   : organizers[record.organizerId!.path],
             ),
           )
-          .whereType<Event>(),
+          .whereType<Event>()
+          .where((event) => event.status == EventStatus.published),
     );
   }
 

@@ -25,6 +25,11 @@ final class FirestoreMapEventRepository implements MapEventRepository {
       limit: limit,
     );
 
-    return List.unmodifiable(records.map(eventFromRecord).whereType<Event>());
+    return List.unmodifiable(
+      records
+          .map(eventFromRecord)
+          .whereType<Event>()
+          .where((event) => event.status == EventStatus.published),
+    );
   }
 }

@@ -27,16 +27,18 @@ void main() {
     expect(rules, contains('match /devices/{deviceId}'));
     expect(rules, contains('match /notifications/{notificationId}'));
     expect(rules, contains('match /notification_queue/{notificationId}'));
-    expect(rules, contains('data.max_per_day == 3'));
+    expect(rules, contains('data.max_per_day >= 1'));
     expect(rules, contains('interactionCount(request.resource.data)'));
     expect(rules, contains('match /organizers/{organizerId}'));
     expect(rules, contains('request.auth.token.admin == true'));
     expect(rules, contains('match /{document=**}'));
   });
 
-  test('notification functions contain the anti-spam guardrails', () {
+  test('notification functions contain the anti-spam guardrails and real triggers', () {
     final functions = File('firebase/functions/index.js').readAsStringSync();
 
+    expect(functions, contains('onEventCreated'));
+    expect(functions, contains('revealScheduledTeasers'));
     expect(functions, contains('onFavoriteEventChanged'));
     expect(functions, contains('queueUpcomingFavoriteEvents'));
     expect(functions, contains('queueWeeklyRecommendations'));

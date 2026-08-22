@@ -27,6 +27,7 @@ final class Event {
     this.format = EventFormat.inPerson,
     this.status = EventStatus.draft,
     this.ticketAvailability = TicketAvailability.unknown,
+    Iterable<String> artists = const [],
     Iterable<String> tags = const [],
     Iterable<String> languageCodes = const [],
     Iterable<String> accessibilityTags = const [],
@@ -45,6 +46,7 @@ final class Event {
        endsAt = endsAt?.toUtc(),
        price = price ?? EventPrice.unknown(),
        links = List.unmodifiable(links),
+       artists = List.unmodifiable(_normalizeNames(artists)),
        tags = Set.unmodifiable(_normalizeValues(tags)),
        languageCodes = Set.unmodifiable(_normalizeValues(languageCodes)),
        accessibilityTags = Set.unmodifiable(
@@ -108,6 +110,7 @@ final class Event {
   final EventFormat format;
   final EventStatus status;
   final TicketAvailability ticketAvailability;
+  final List<String> artists;
   final Set<String> tags;
   final Set<String> languageCodes;
   final Set<String> accessibilityTags;
@@ -155,6 +158,15 @@ String _requiredText(String value, String field) {
 Iterable<String> _normalizeValues(Iterable<String> values) sync* {
   for (final value in values) {
     final normalized = value.trim().toLowerCase();
+    if (normalized.isNotEmpty) {
+      yield normalized;
+    }
+  }
+}
+
+Iterable<String> _normalizeNames(Iterable<String> values) sync* {
+  for (final value in values) {
+    final normalized = value.trim();
     if (normalized.isNotEmpty) {
       yield normalized;
     }

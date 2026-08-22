@@ -75,7 +75,7 @@ void main() {
       ),
     );
     expect(emailField.decoration?.filled, isTrue);
-    expect(emailField.decoration?.fillColor, const Color(0xFFFFFFFF));
+    expect(emailField.decoration?.fillColor, const Color(0xFF16161F));
     final fieldBorder =
         emailField.decoration?.enabledBorder as OutlineInputBorder;
     expect(fieldBorder.borderRadius.topLeft.x, 8);

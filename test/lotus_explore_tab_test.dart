@@ -25,7 +25,13 @@ void main() {
 
     expect(find.text('Explorar'), findsOneWidget);
     expect(find.byKey(const Key('explore-search')), findsOneWidget);
+    expect(find.byKey(const Key('explore-radar-banner')), findsOneWidget);
     expect(find.text('Em destaque'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Hoje'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Hoje'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Perto de mim'),

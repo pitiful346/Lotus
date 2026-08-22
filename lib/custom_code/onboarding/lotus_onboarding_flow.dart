@@ -306,11 +306,31 @@ class _InterestsStep extends StatelessWidget {
       runSpacing: 10,
       children: _categories.entries
           .map(
-            (entry) => FilterChip(
-              label: Text(entry.value),
-              selected: selected.contains(entry.key),
-              onSelected: (value) => onChanged(entry.key, value),
-            ),
+            (entry) {
+              final active = selected.contains(entry.key);
+              return FilterChip(
+                label: Text(
+                  entry.value,
+                  style: TextStyle(
+                    color: active ? const Color(0xFF11161D) : Colors.white,
+                    fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
+                selected: active,
+                selectedColor: lotusQualityAccent,
+                backgroundColor: const Color(0xFF151B23),
+                checkmarkColor: const Color(0xFF11161D),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(
+                    color: active
+                        ? lotusQualityAccent
+                        : const Color(0xFF293342),
+                  ),
+                ),
+                onSelected: (value) => onChanged(entry.key, value),
+              );
+            },
           )
           .toList(),
     ),
@@ -331,12 +351,41 @@ class _CityStep extends StatelessWidget {
     child: DropdownButtonFormField<String>(
       key: const Key('onboarding-city'),
       initialValue: city,
-      decoration: const InputDecoration(
+      dropdownColor: const Color(0xFF151B23),
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+      iconEnabledColor: lotusQualityAccent,
+      decoration: InputDecoration(
         labelText: 'Cidade',
-        border: OutlineInputBorder(),
+        labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+        filled: true,
+        fillColor: const Color(0xFF151B23),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF293342)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF293342)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: lotusQualityAccent, width: 1.5),
+        ),
       ),
       items: _cities
-          .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+          .map(
+            (value) => DropdownMenuItem(
+              value: value,
+              child: Text(
+                value,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          )
           .toList(),
       onChanged: (value) {
         if (value != null) onChanged(value);

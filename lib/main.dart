@@ -11,8 +11,9 @@ import 'auth/firebase_auth/firebase_user_provider.dart';
 import 'auth/firebase_auth/auth_util.dart';
 
 import 'backend/firebase/firebase_config.dart';
-import 'backend/backend.dart';
 import 'custom_code/notifications/firebase_notification_coordinator.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'custom_code/notifications/lotus_deep_link_handler.dart';
 import 'index.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'flutter_flow/flutter_flow_util.dart';
@@ -21,6 +22,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoRouter.optionURLReflectsImperativeAPIs = true;
   usePathUrlStrategy();
+  await initializeDateFormatting('pt_PT', null);
 
   await initFirebase();
   await FirebaseNotificationCoordinator.instance.start();
@@ -133,38 +135,21 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _openNotification(RemoteMessage message) async {
+    final context = appNavigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+
+    final handled = await LotusDeepLinkHandler.instance
+        .handleRemoteMessage(context, message);
+    if (handled) return;
+
     if (message.data['route'] == 'saved') {
-      final context = appNavigatorKey.currentContext;
-      if (context != null && context.mounted) {
-        context.pushNamed(SavedWidget.routeName);
-      }
+      context.pushNamed(SavedWidget.routeName);
       return;
     }
-    final rawEventId = message.data['eventId']?.trim();
-    if (rawEventId == null || rawEventId.isEmpty) return;
-    final eventId = rawEventId.startsWith('events/')
-        ? rawEventId.substring('events/'.length)
-        : rawEventId;
-    if (eventId.isEmpty || eventId.contains('/')) return;
-    try {
-      final reference = FirebaseFirestore.instance
-          .collection('events')
-          .doc(eventId);
-      final record = await EventsRecord.getDocumentOnce(reference);
-      final context = appNavigatorKey.currentContext;
-      if (context == null || !context.mounted) return;
-      context.pushNamed(
-        EventDetailsWidget.routeName,
-        queryParameters: {
-          'eventoAtual': serializeParam(record, ParamType.Document),
-        }.withoutNulls,
-        extra: <String, dynamic>{'eventoAtual': record},
-      );
-    } catch (_) {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(content: Text('Este evento já não está disponível.')),
-      );
-    }
+
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o conteúdo da notificação.')),
+    );
   }
 
   @override
@@ -180,10 +165,72 @@ class _MyAppState extends State<MyApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en', '')],
-      theme: ThemeData(brightness: Brightness.light, useMaterial3: false),
-      darkTheme: ThemeData(brightness: Brightness.dark, useMaterial3: false),
+      theme: _buildLotusTheme(),
+      darkTheme: _buildLotusTheme(),
       themeMode: _themeMode,
       routerConfig: _router,
     );
   }
+}
+
+ThemeData _buildLotusTheme() {
+  return ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: false,
+    scaffoldBackgroundColor: const Color(0xFF080B10),
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFFB7F34A),
+      onPrimary: Color(0xFF11161D),
+      secondary: Color(0xFFB7F34A),
+      onSecondary: Color(0xFF11161D),
+      surface: Color(0xFF151B23),
+      onSurface: Colors.white,
+      error: Color(0xFFFF5252),
+      onError: Colors.white,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: const Color(0xFF151B23),
+      disabledColor: const Color(0xFF1A222C),
+      selectedColor: const Color(0xFFB7F34A),
+      secondarySelectedColor: const Color(0xFFB7F34A),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      labelStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        color: Color(0xFF11161D),
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
+      ),
+      brightness: Brightness.dark,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: Color(0xFF293342)),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: const Color(0xFF151B23),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFF293342)),
+      ),
+      titleTextStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+      ),
+      contentTextStyle: const TextStyle(
+        color: Color(0xFFCBD5E1),
+        fontSize: 15,
+        height: 1.4,
+      ),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Color(0xFF151B23),
+      modalBackgroundColor: Color(0xFF151B23),
+    ),
+    dividerColor: const Color(0xFF242E3B),
+  );
 }

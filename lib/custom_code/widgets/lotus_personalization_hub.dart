@@ -197,14 +197,31 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
                             final active = selected.contains(entry.key);
                             return FilterChip(
                               selected: active,
-                              label: Text(entry.value),
+                              label: Text(
+                                entry.value,
+                                style: TextStyle(
+                                  color: active
+                                      ? const Color(0xFF11161D)
+                                      : Colors.white,
+                                  fontWeight: active
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                ),
+                              ),
                               onSelected: (value) => setSheetState(() {
                                 value
                                     ? selected.add(entry.key)
                                     : selected.remove(entry.key);
                               }),
                               selectedColor: _accent,
-                              checkmarkColor: Colors.black,
+                              backgroundColor: _surface,
+                              checkmarkColor: const Color(0xFF11161D),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: BorderSide(
+                                  color: active ? _accent : _border,
+                                ),
+                              ),
                             );
                           })
                           .toList(growable: false),
@@ -217,10 +234,17 @@ class _LotusPersonalizationHubState extends State<LotusPersonalizationHub> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: _accent,
-                      foregroundColor: Colors.black,
+                      foregroundColor: const Color(0xFF11161D),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     onPressed: () => Navigator.pop(context, selected),
-                    child: const Text('Guardar interesses'),
+                    child: const Text(
+                      'Guardar interesses',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
               ],

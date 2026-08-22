@@ -61,6 +61,30 @@ class _LotusNotificationSettingsState extends State<LotusNotificationSettings> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _NotificationToggle(
+                icon: Icons.campaign_outlined,
+                title: 'Promotores seguidos',
+                subtitle: 'Novos eventos publicados por promotores que segues',
+                value: preferences.followedPromoters,
+                enabled: !_saving,
+                onChanged: (value) => _save(
+                  userId,
+                  preferences.copyWith(followedPromoters: value),
+                ),
+              ),
+              const Divider(),
+              _NotificationToggle(
+                icon: Icons.radar_outlined,
+                title: 'Radar & Reveals',
+                subtitle: 'Avisos quando os teasers que acompanhas forem revelados',
+                value: preferences.radarReveals,
+                enabled: !_saving,
+                onChanged: (value) => _save(
+                  userId,
+                  preferences.copyWith(radarReveals: value),
+                ),
+              ),
+              const Divider(),
+              _NotificationToggle(
                 icon: Icons.favorite_outline_rounded,
                 title: 'Alterações nos favoritos',
                 subtitle: 'Mudanças de data, local ou cancelamento',
@@ -92,6 +116,16 @@ class _LotusNotificationSettingsState extends State<LotusNotificationSettings> {
                 enabled: !_saving,
                 onChanged: (value) =>
                     _save(userId, preferences.copyWith(recommendations: value)),
+              ),
+              const Divider(),
+              _NotificationToggle(
+                icon: Icons.notifications_none_rounded,
+                title: 'Marketing e Novidades',
+                subtitle: 'Novidades exclusivas sobre o ecossistema Lotus',
+                value: preferences.marketing,
+                enabled: !_saving,
+                onChanged: (value) =>
+                    _save(userId, preferences.copyWith(marketing: value)),
               ),
               const SizedBox(height: 10),
               Row(

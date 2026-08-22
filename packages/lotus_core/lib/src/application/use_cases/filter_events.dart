@@ -15,40 +15,64 @@ final class FilterEvents {
       return List.unmodifiable(events);
     }
     final dateRange = _dateRange(filters.date, now);
-    return List.unmodifiable(
-      events.where((event) {
-        if (dateRange != null &&
-            !event.occursBetween(dateRange.start, dateRange.endInclusive)) {
-          return false;
-        }
-        if (filters.categoryIds.isNotEmpty &&
-            !_matchesCategory(event, filters.categoryIds)) {
-          return false;
-        }
-        if (filters.freeOnly && !event.isFree) {
-          return false;
-        }
+    final filtered = events.where((event) {
+      if (dateRange != null &&
+          !event.occursBetween(dateRange.start, dateRange.endInclusive)) {
+        return false;
+      }
+      if (filters.categoryIds.isNotEmpty &&
+          !_matchesCategory(event, filters.categoryIds)) {
+        return false;
+      }
+      if (filters.freeOnly && !event.isFree) {
+        return false;
+      }
 
-        final maximumPrice = filters.maximumPriceMinorUnits;
-        final minimumPrice = event.price.minimumMinorUnits;
-        if (maximumPrice != null &&
-            (minimumPrice == null || minimumPrice > maximumPrice)) {
+      final maximumPrice = filters.maximumPriceMinorUnits;
+      final minimumPrice = event.price.minimumMinorUnits;
+      if (maximumPrice != null &&
+          (minimumPrice == null || minimumPrice > maximumPrice)) {
+        return false;
+      }
+
+      final maximumDistance = filters.maximumDistanceMeters;
+      if (maximumDistance != null) {
+        if (userCoordinates == null) {
           return false;
         }
-
-        final maximumDistance = filters.maximumDistanceMeters;
-        if (maximumDistance != null) {
-          if (userCoordinates == null) {
-            return false;
-          }
-          final distance = calculateDistanceToEvent(userCoordinates, event);
-          if (distance == null || distance > maximumDistance) {
-            return false;
-          }
+        final distance = calculateDistanceToEvent(userCoordinates, event);
+        if (distance == null || distance > maximumDistance) {
+          return false;
         }
-        return true;
-      }),
-    );
+      }
+      return true;
+    }).toList();
+
+    if (filters.sortBy != null) {
+      switch (filters.sortBy!) {
+        case EventSortBy.proximity:
+          if (userCoordinates != null) {
+            filtered.sort((left, right) {
+              final d1 =
+                  calculateDistanceToEvent(userCoordinates, left) ??
+                  double.infinity;
+              final d2 =
+                  calculateDistanceToEvent(userCoordinates, right) ??
+                  double.infinity;
+              return d1.compareTo(d2);
+            });
+          }
+        case EventSortBy.popularity:
+          filtered.sort(
+            (left, right) =>
+                right.popularityScore.compareTo(left.popularityScore),
+          );
+        case EventSortBy.date:
+          filtered.sort((left, right) => left.startsAt.compareTo(right.startsAt));
+      }
+    }
+
+    return List.unmodifiable(filtered);
   }
 }
 

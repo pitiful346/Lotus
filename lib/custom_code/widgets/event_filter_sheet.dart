@@ -44,6 +44,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
   late bool _freeOnly;
   late double? _maximumDistanceMeters;
   late int? _maximumPriceMinorUnits;
+  late EventSortBy? _sortBy;
 
   @override
   void initState() {
@@ -59,6 +60,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
         ? filters.maximumDistanceMeters
         : null;
     _maximumPriceMinorUnits = filters.maximumPriceMinorUnits;
+    _sortBy = filters.sortBy;
   }
 
   EventFilters get _filters => EventFilters(
@@ -67,6 +69,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
     freeOnly: _freeOnly,
     maximumDistanceMeters: _maximumDistanceMeters,
     maximumPriceMinorUnits: _maximumPriceMinorUnits,
+    sortBy: _sortBy,
   );
 
   void _clear() {
@@ -164,7 +167,7 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
                   padding: EdgeInsets.only(bottom: 10),
                   child: Text(
                     'Ativa a localização para filtrar por distância.',
-                    style: TextStyle(color: Color(0xFF9AA8B8)),
+                    style: TextStyle(color: Color(0xFF94A3B8)),
                   ),
                 ),
               Wrap(
@@ -203,6 +206,39 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
                     ),
                 ],
               ),
+              const SizedBox(height: 24),
+              const _SectionTitle('Ordenar por'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Data'),
+                    selected: _sortBy == EventSortBy.date,
+                    onSelected: (selected) => setState(
+                      () => _sortBy = selected ? EventSortBy.date : null,
+                    ),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Mais próximos'),
+                    selected: _sortBy == EventSortBy.proximity,
+                    onSelected: widget.hasUserLocation
+                        ? (selected) => setState(
+                            () => _sortBy =
+                                selected ? EventSortBy.proximity : null,
+                          )
+                        : null,
+                  ),
+                  ChoiceChip(
+                    label: const Text('Popularidade'),
+                    selected: _sortBy == EventSortBy.popularity,
+                    onSelected: (selected) => setState(
+                      () => _sortBy =
+                          selected ? EventSortBy.popularity : null,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 28),
               SizedBox(
                 width: double.infinity,
@@ -216,7 +252,10 @@ class _EventFilterSheetState extends State<EventFilterSheet> {
                   ),
                   child: const Text(
                     'Aplicar filtros',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
@@ -248,9 +287,9 @@ class _SectionTitle extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(
-          color: Color(0xFFDCE4EE),
+          color: Colors.white,
           fontSize: 15,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

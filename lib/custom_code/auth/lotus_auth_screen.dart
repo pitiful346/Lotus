@@ -240,7 +240,7 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
   }) {
     final theme = FlutterFlowTheme.of(context);
     final border = OutlineInputBorder(
-      borderSide: const BorderSide(color: Colors.transparent),
+      borderSide: BorderSide(color: theme.alternate),
       borderRadius: BorderRadius.circular(8),
     );
     return TextFormField(
@@ -255,20 +255,22 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
       decoration: InputDecoration(
         isDense: true,
         labelText: label,
-        labelStyle: theme.labelMedium,
+        labelStyle: theme.labelMedium.copyWith(color: theme.secondaryText),
         enabledBorder: border,
-        focusedBorder: border,
+        focusedBorder: border.copyWith(
+          borderSide: const BorderSide(color: Color(0xFFB7F34A), width: 1.5),
+        ),
         errorBorder: border.copyWith(
           borderSide: BorderSide(color: theme.error),
         ),
         focusedErrorBorder: border.copyWith(
-          borderSide: BorderSide(color: theme.error),
+          borderSide: BorderSide(color: theme.error, width: 1.5),
         ),
         filled: true,
         fillColor: theme.secondaryBackground,
       ),
-      style: theme.bodyMedium,
-      cursorColor: theme.primaryText,
+      style: theme.bodyMedium.copyWith(color: Colors.white),
+      cursorColor: const Color(0xFFB7F34A),
       validator: validator,
     );
   }
@@ -276,7 +278,7 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
   Widget _passwordField({required bool registering}) {
     final theme = FlutterFlowTheme.of(context);
     final border = OutlineInputBorder(
-      borderSide: const BorderSide(color: Colors.transparent),
+      borderSide: BorderSide(color: theme.alternate),
       borderRadius: BorderRadius.circular(8),
     );
     return TextFormField(
@@ -292,14 +294,16 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
       decoration: InputDecoration(
         isDense: true,
         labelText: 'Palavra-passe',
-        labelStyle: theme.labelMedium,
+        labelStyle: theme.labelMedium.copyWith(color: theme.secondaryText),
         enabledBorder: border,
-        focusedBorder: border,
+        focusedBorder: border.copyWith(
+          borderSide: const BorderSide(color: Color(0xFFB7F34A), width: 1.5),
+        ),
         errorBorder: border.copyWith(
           borderSide: BorderSide(color: theme.error),
         ),
         focusedErrorBorder: border.copyWith(
-          borderSide: BorderSide(color: theme.error),
+          borderSide: BorderSide(color: theme.error, width: 1.5),
         ),
         filled: true,
         fillColor: theme.secondaryBackground,
@@ -316,11 +320,12 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
             _obscurePassword
                 ? Icons.visibility_outlined
                 : Icons.visibility_off_outlined,
+            color: const Color(0xFF94A3B8),
           ),
         ),
       ),
-      style: theme.bodyMedium,
-      cursorColor: theme.primaryText,
+      style: theme.bodyMedium.copyWith(color: Colors.white),
+      cursorColor: const Color(0xFFB7F34A),
       validator: (value) =>
           (value?.length ?? 0) < 6 ? 'Usa pelo menos 6 caracteres.' : null,
     );
@@ -336,7 +341,10 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
         child: Text(
           error,
           key: const Key('auth-error'),
-          style: theme.bodySmall.copyWith(color: theme.error),
+          style: theme.bodySmall.copyWith(
+            color: theme.error,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -355,7 +363,7 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: theme.primary,
+            color: const Color(0xFFB7F34A),
             borderRadius: BorderRadius.circular(8),
           ),
           child: _submitting
@@ -363,13 +371,15 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
                   dimension: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: Color(0xFF11161D),
                   ),
                 )
-              : Text(
+              : const Text(
                   'Entrar',
-                  style: theme.bodyMedium.copyWith(
-                    color: theme.primaryBackground,
+                  style: TextStyle(
+                    color: Color(0xFF11161D),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
                     height: 1.4,
                   ),
                 ),
@@ -391,7 +401,7 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
           constraints: const BoxConstraints(minWidth: 160, minHeight: 52),
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: const Color(0xFFB7F34A),
             borderRadius: BorderRadius.circular(9999),
           ),
           child: _submitting
@@ -400,20 +410,28 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
                     dimension: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: Color(0xFF11161D),
                     ),
                   ),
                 )
-              : Row(
+              : const Row(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       'Criar conta',
-                      style: theme.labelLarge.copyWith(color: Colors.white),
+                      style: TextStyle(
+                        color: Color(0xFF11161D),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.arrow_forward, color: theme.secondary, size: 18),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.arrow_forward,
+                      color: Color(0xFF11161D),
+                      size: 18,
+                    ),
                   ],
                 ),
         ),
@@ -426,7 +444,13 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
       Expanded(child: Divider(color: theme.alternate, height: 1)),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Text('ou', style: theme.bodyMedium.copyWith(height: 1.4)),
+        child: Text(
+          'ou',
+          style: theme.bodyMedium.copyWith(
+            color: theme.secondaryText,
+            height: 1.4,
+          ),
+        ),
       ),
       Expanded(child: Divider(color: theme.alternate, height: 1)),
     ],
@@ -448,7 +472,7 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
           height: 1.4,
         ),
       ),
-      const SizedBox(width: 4),
+      const SizedBox(width: 8),
       InkWell(
         key: key,
         onTap: _submitting ? null : onTap,
@@ -456,7 +480,10 @@ class _LotusAuthScreenState extends State<LotusAuthScreen> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Text(
             action,
-            style: theme.bodyMedium.copyWith(color: theme.primary),
+            style: theme.bodyMedium.copyWith(
+              color: const Color(0xFFB7F34A),
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),

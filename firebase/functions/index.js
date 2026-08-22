@@ -36,6 +36,40 @@ const QUIET_HOURS_START = 22;
 const QUIET_HOURS_END = 8;
 const STALE_DEVICE_DAYS = 35;
 
+exports.onEventCreated = functions.firestore
+    .document("events/{eventId}")
+    .onCreate(async (snapshot, context) => {
+      const data = snapshot.data();
+      if (!data || data.status !== "PUBLISHED" || data.is_archived === true) return null;
+
+      const organizerRef = data.organizer_id;
+      if (!organizerRef) return null;
+
+      const cleanOrgRef = typeof organizerRef === "string"
+          ? (organizerRef.includes("/") ? organizerRef : `organizers/${organizerRef}`)
+          : (organizerRef.path || "");
+
+      if (!cleanOrgRef) return null;
+
+      await forEachPromoterFollower(cleanOrgRef, async (userId) => {
+        await queueNotification({
+          userId,
+          type: "promoter_new_event",
+          dedupeKey: `promoter_new_event:${context.params.eventId}`,
+          title: data.name || "Novo Evento Publicado",
+          body: `${data.organizer_name || "Um promotor que segues"} acabou de publicar um novo evento.`,
+          eventId: context.params.eventId,
+          data: {
+            deep_link: `lotus://event/${context.params.eventId}`,
+            eventId: context.params.eventId,
+            promoterId: cleanOrgRef.split("/").pop(),
+            type: "promoter_new_event",
+          },
+        });
+      });
+      return null;
+    });
+
 exports.onFavoriteEventChanged = functions.firestore
     .document("events/{eventId}")
     .onUpdate(async (change, context) => {
@@ -45,16 +79,26 @@ exports.onFavoriteEventChanged = functions.firestore
       if (changed.length === 0) return null;
 
       const title = after.name || "Evento guardado";
-      const description = eventChangeDescription(changed);
+      const isCancelled = after.status === "CANCELLED" || (after.is_archived === true && before.is_archived !== true);
+      const type = isCancelled ? "favorite_cancelled" : "favorite_changed";
+      const description = isCancelled
+          ? "Este evento foi cancelado ou arquivado pelo promotor."
+          : eventChangeDescription(changed);
+
       await forEachFavoriteOwner(change.after.ref, async (userId) => {
         await queueNotification({
           userId,
-          type: "favorite_changed",
-          dedupeKey: `favorite_changed:${context.params.eventId}:` +
+          type,
+          dedupeKey: `${type}:${context.params.eventId}:` +
             `${change.after.updateTime.toMillis()}`,
           title,
           body: description,
           eventId: context.params.eventId,
+          data: {
+            deep_link: `lotus://event/${context.params.eventId}`,
+            eventId: context.params.eventId,
+            type,
+          },
         });
       });
       return null;
@@ -241,14 +285,20 @@ async function deliverNotification(queueDocument) {
     await removeInvalidDevices(freshDevices, response.responses);
     const deliveredAt = FieldValue.serverTimestamp();
     const status = response.successCount > 0 ? "sent" : "failed";
+    const deepLink = queue.data?.deep_link ||
+      (queue.data?.eventId ? `lotus://event/${queue.data.eventId}` :
+      (queue.eventId ? `lotus://event/${queue.eventId}` : null));
+
     await Promise.all([
       queueDocument.ref.update({status, delivered_at: deliveredAt}),
       firestore.doc(`users/${userId}/notifications/${queueDocument.id}`).set({
+        id: queueDocument.id,
         type: queue.type,
         title: queue.title,
         body: queue.body,
+        status: "UNREAD",
+        deep_link: deepLink,
         data: queue.data || {},
-        status,
         created_at: queue.created_at || deliveredAt,
         delivered_at: deliveredAt,
       }),
@@ -282,6 +332,33 @@ async function forEachFavoriteOwner(eventReference, callback) {
   } while (lastDocument != null);
 }
 
+async function forEachPromoterFollower(organizerPath, callback) {
+  const firestore = getFirestore();
+  const orgDocRef = firestore.doc(organizerPath);
+  let lastDocument = null;
+  do {
+    let query = firestore.collectionGroup("following")
+        .where("organizer_ref", "==", orgDocRef)
+        .orderBy("__name__")
+        .limit(250);
+    if (lastDocument != null) query = query.startAfter(lastDocument);
+    const follows = await query.get();
+    for (const follow of follows.docs) {
+      const user = follow.ref.parent.parent;
+      if (user != null) await callback(user.id);
+    }
+    lastDocument = follows.docs.at(-1) || null;
+    if (follows.size < 250) break;
+  } while (lastDocument != null);
+}
+
+async function forEachTeaserTracker(teaserRef, callback) {
+  const trackers = await teaserRef.collection("trackers").limit(500).get();
+  for (const tracker of trackers.docs) {
+    await callback(tracker.id);
+  }
+}
+
 async function removeInvalidDevices(devices, responses) {
   const invalidCodes = new Set([
     "messaging/invalid-registration-token",
@@ -297,14 +374,23 @@ async function removeInvalidDevices(devices, responses) {
 }
 
 function preferenceAllows(preferences, type) {
-  if (type === "favorite_changed") {
-    return preferences.favorite_event_updates === true;
+  if (type === "promoter_new_event") {
+    return preferences.followed_promoters !== false;
+  }
+  if (type === "teaser_revealed") {
+    return preferences.radar_reveals !== false;
+  }
+  if (type === "favorite_changed" || type === "favorite_cancelled") {
+    return preferences.favorite_event_updates !== false;
   }
   if (type === "favorite_starting_soon") {
     return preferences.upcoming_favorite_events === true;
   }
   if (type === "recommendations_digest") {
     return preferences.recommendations === true;
+  }
+  if (type === "marketing") {
+    return preferences.marketing === true;
   }
   return false;
 }
@@ -380,3 +466,71 @@ function stringData(data) {
       Object.entries(data || {}).map(([key, value]) => [key, String(value)]),
   );
 }
+
+exports.revealScheduledTeasers = functions.pubsub
+    .schedule("every 1 minutes")
+    .timeZone(TIME_ZONE)
+    .onRun(async () => {
+      const firestore = getFirestore();
+      const now = Timestamp.now();
+
+      const snapshot = await firestore.collection("teasers")
+          .where("status", "in", ["PUBLISHED", "TEASER_ACTIVE"])
+          .where("reveal_at", "<=", now)
+          .limit(100)
+          .get();
+
+      if (snapshot.empty) return null;
+
+      const batch = firestore.batch();
+      let revealedCount = 0;
+
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        batch.update(doc.ref, {
+          status: "REVEALED",
+          updated_at: FieldValue.serverTimestamp(),
+        });
+
+        const targetEventId = data.target_event_id
+            ? data.target_event_id.replace(/^events\//, "")
+            : null;
+
+        if (data.target_event_id) {
+          const eventRef = data.target_event_id.includes("/")
+            ? firestore.doc(data.target_event_id)
+            : firestore.collection("events").doc(data.target_event_id);
+
+          batch.update(eventRef, {
+            status: "PUBLISHED",
+            is_archived: false,
+          });
+        }
+
+        await forEachTeaserTracker(doc.ref, async (userId) => {
+          await queueNotification({
+            userId,
+            type: "teaser_revealed",
+            dedupeKey: `teaser_revealed:${doc.id}`,
+            title: "⚡ Revelação no Radar Lotus!",
+            body: `O mistério foi revelado! Descobre os detalhes de "${data.title || "Radar"}".`,
+            eventId: targetEventId,
+            data: {
+              deep_link: targetEventId
+                  ? `lotus://event/${targetEventId}`
+                  : `lotus://teaser/${doc.id}`,
+              teaserId: doc.id,
+              eventId: targetEventId || "",
+              type: "teaser_revealed",
+            },
+          });
+        });
+
+        revealedCount++;
+      }
+
+      await batch.commit();
+      logger.info(`Successfully revealed ${revealedCount} scheduled teaser(s).`);
+      return null;
+    });
+
